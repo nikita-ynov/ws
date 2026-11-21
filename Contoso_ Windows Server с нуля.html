@@ -1,0 +1,1270 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contoso: Windows Server с нуля</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;800&family=Onest:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/* Plan: учебник-«стойка». Слева панель модулей как юниты серверной стойки (U01…U18),
+   справа длинная лента глав. Широкий гротеск Unbounded — только для номеров и заголовков,
+   как маркировка на оборудовании. Холодная серо-зелёная «бумага», кобальтовый акцент,
+   семантика ok/warn/bad — отдельно. */
+:root{
+  --paper:#e9ece6;
+  --surface:#f6f7f3;
+  --ink:#121518;
+  --muted:#58615b;
+  --line:#c6ccc3;
+  --accent:#2a44e6;
+  --accent-soft:#dfe3ff;
+  --on-accent:#ffffff;
+  --ok:#17804a; --ok-soft:#d8f0e2;
+  --warn:#a86a10; --warn-soft:#f6ead2;
+  --bad:#bf3127; --bad-soft:#f7dcd9;
+  --code-bg:#15181c; --code-ink:#dde2da; --code-dim:#7f8a83; --code-acc:#9db0ff;
+  --grid:rgba(18,21,24,.045);
+  --f-display:"Unbounded","Arial Black",system-ui,sans-serif;
+  --f-body:"Onest",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#0f1113; --surface:#171a1d; --ink:#e4e7e1; --muted:#99a29b; --line:#2a2f33;
+    --accent:#8394ff; --accent-soft:#1e2550; --on-accent:#0b0d18;
+    --ok:#4cc584; --ok-soft:#12301f; --warn:#e0a54a; --warn-soft:#33260f; --bad:#f06c60; --bad-soft:#3a1714;
+    --code-bg:#0a0c0e; --grid:rgba(228,231,225,.035);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0f1113; --surface:#171a1d; --ink:#e4e7e1; --muted:#99a29b; --line:#2a2f33;
+  --accent:#8394ff; --accent-soft:#1e2550; --on-accent:#0b0d18;
+  --ok:#4cc584; --ok-soft:#12301f; --warn:#e0a54a; --warn-soft:#33260f; --bad:#f06c60; --bad-soft:#3a1714;
+  --code-bg:#0a0c0e; --grid:rgba(228,231,225,.035);
+  color-scheme:dark;
+}
+
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:24px}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}*{transition:none!important;animation:none!important}}
+body{
+  margin:0;background:var(--paper);color:var(--ink);font-family:var(--f-body);font-size:17px;line-height:1.6;
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size:32px 32px;
+}
+a{color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+code,kbd,.mono{font-family:var(--f-mono);font-size:.88em}
+p code,li code,td code{background:var(--surface);border:1px solid var(--line);padding:.05em .35em;border-radius:4px;white-space:nowrap}
+h1,h2,h3{text-wrap:balance;line-height:1.15}
+h3{font-size:1.15rem;margin:2rem 0 .6rem}
+
+/* ---------- layout ---------- */
+.shell{display:grid;grid-template-columns:260px minmax(0,1fr);min-height:100%}
+.rack{
+  position:sticky;top:0;height:100vh;overflow-y:auto;border-right:1px solid var(--line);
+  background:var(--surface);padding:20px 14px 28px;display:flex;flex-direction:column;gap:14px;
+}
+.rack-head{font-family:var(--f-display);font-weight:800;font-size:.95rem;letter-spacing:.02em;line-height:1.2}
+.rack-head small{display:block;font-family:var(--f-mono);font-weight:400;font-size:.7rem;color:var(--muted);letter-spacing:0;margin-top:4px}
+.progress{display:flex;flex-direction:column;gap:6px;font-size:.8rem;color:var(--muted)}
+.bar{height:6px;background:var(--line);border-radius:3px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .4s}
+.rack nav{display:flex;flex-direction:column;gap:2px}
+.rack nav a{
+  display:grid;grid-template-columns:34px 1fr 10px;align-items:center;gap:6px;
+  padding:6px 8px;border-radius:6px;text-decoration:none;color:var(--ink);font-size:.86rem;line-height:1.25;
+  border:1px solid transparent;
+}
+.rack nav a:hover{background:var(--paper);border-color:var(--line)}
+.rack nav a .u{font-family:var(--f-mono);font-size:.7rem;color:var(--muted)}
+.rack nav a .led{width:8px;height:8px;border-radius:50%;background:var(--line)}
+.rack nav a.done .led{background:var(--ok);box-shadow:0 0 0 3px var(--ok-soft)}
+.rack nav a.active{background:var(--accent-soft);border-color:transparent}
+.rack nav .grp{font-family:var(--f-mono);font-size:.66rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin:12px 8px 4px}
+.theme-btn{margin-top:auto;font:inherit;font-size:.8rem;background:none;border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:6px 10px;cursor:pointer}
+
+main{padding:0 clamp(16px,4vw,56px) 120px;max-width:1080px}
+.mobile-top{display:none}
+
+/* ---------- hero ---------- */
+.hero{padding:48px 0 32px;display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:36px;align-items:start;border-bottom:1px solid var(--line)}
+.eyebrow{font-family:var(--f-mono);font-size:.75rem;color:var(--muted);letter-spacing:.04em}
+.hero h1{font-family:var(--f-display);font-weight:800;font-size:clamp(2rem,4.4vw,3.3rem);letter-spacing:-.02em;margin:.4em 0 .35em}
+.hero h1 em{font-style:normal;color:var(--accent)}
+.hero p.lead{font-size:1.1rem;max-width:34em;margin:0 0 1rem}
+.hero .meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:.78rem;font-family:var(--f-mono);border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:3px 10px;color:var(--muted)}
+
+/* simulator */
+.sim{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px;box-shadow:0 18px 40px -28px rgba(0,0,0,.35)}
+.sim-top{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:12px}
+.sim-top b{font-family:var(--f-display);font-size:.85rem;font-weight:600}
+.clock{font-family:var(--f-mono);font-size:.8rem;color:var(--bad)}
+.nodes{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.node{
+  font:inherit;text-align:left;cursor:pointer;border:1px solid var(--line);background:var(--paper);color:var(--ink);
+  border-radius:10px;padding:10px 12px;display:grid;grid-template-columns:auto 1fr;gap:2px 10px;align-items:center;
+}
+.node .pw{grid-row:span 2;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:var(--ok-soft);color:var(--ok);font-weight:700;font-size:.8rem}
+.node .nm{font-family:var(--f-mono);font-weight:600;font-size:.86rem}
+.node .st{font-size:.74rem;color:var(--muted)}
+.node.off{border-style:dashed}
+.node.off .pw{background:var(--bad-soft);color:var(--bad)}
+.sim-opts{display:flex;flex-wrap:wrap;gap:8px 16px;margin:12px 0 10px;font-size:.82rem}
+.sim-opts label{display:flex;align-items:center;gap:6px;cursor:pointer}
+.svc{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.svc li{display:grid;grid-template-columns:12px 1fr;gap:10px;align-items:start;font-size:.86rem;line-height:1.35;padding:6px 8px;border-radius:8px;background:var(--paper)}
+.svc li .d{width:10px;height:10px;border-radius:50%;margin-top:4px;background:var(--ok)}
+.svc li.warn .d{background:var(--warn)} .svc li.bad .d{background:var(--bad)}
+.svc li b{font-weight:600}
+.svc li span{color:var(--muted)}
+
+/* ---------- chapters ---------- */
+.ch{padding:56px 0 20px;border-bottom:1px solid var(--line)}
+.ch-head{display:grid;grid-template-columns:auto 1fr;gap:6px 18px;align-items:end;margin-bottom:18px}
+.ch-num{font-family:var(--f-display);font-weight:800;font-size:clamp(2.6rem,6vw,4.2rem);line-height:.85;color:transparent;-webkit-text-stroke:1.5px var(--ink);grid-row:span 2}
+.ch-tag{font-family:var(--f-mono);font-size:.74rem;color:var(--muted)}
+.ch h2{font-family:var(--f-display);font-weight:600;font-size:clamp(1.35rem,2.6vw,1.9rem);margin:0;letter-spacing:-.01em}
+.prose{max-width:66ch}
+.prose p{margin:.7em 0}
+.prose ul,.prose ol{padding-left:1.2em;margin:.6em 0}
+.prose li{margin:.25em 0}
+
+.simply{
+  border-left:4px solid var(--accent);background:var(--accent-soft);padding:12px 16px;border-radius:0 10px 10px 0;margin:18px 0;max-width:66ch;
+}
+.simply b:first-child{font-family:var(--f-mono);font-size:.72rem;text-transform:uppercase;letter-spacing:.1em;display:block;margin-bottom:2px;color:var(--accent)}
+.trap{border:1px solid var(--bad);background:var(--bad-soft);padding:12px 16px;border-radius:10px;margin:18px 0;max-width:66ch}
+.trap b:first-child{font-family:var(--f-mono);font-size:.72rem;text-transform:uppercase;letter-spacing:.1em;display:block;color:var(--bad);margin-bottom:2px}
+.fr{font-style:italic;color:var(--muted)}
+
+.tbl-wrap{overflow-x:auto;margin:16px 0;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.9rem;min-width:540px}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-family:var(--f-mono);font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);background:var(--paper)}
+tr:last-child td{border-bottom:none}
+.pill{display:inline-block;font-family:var(--f-mono);font-size:.72rem;padding:1px 8px;border-radius:999px;white-space:nowrap}
+.pill.ok{background:var(--ok-soft);color:var(--ok)} .pill.warn{background:var(--warn-soft);color:var(--warn)} .pill.bad{background:var(--bad-soft);color:var(--bad)}
+
+.duo{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:16px 0}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.card h4{margin:0 0 6px;font-size:1rem}
+.card p{margin:.3em 0;font-size:.93rem}
+
+/* code */
+.code{position:relative;margin:14px 0;border-radius:10px;background:var(--code-bg);color:var(--code-ink);overflow:hidden}
+.code .cap{display:flex;justify-content:space-between;align-items:center;padding:7px 12px;font-family:var(--f-mono);font-size:.7rem;color:var(--code-dim);border-bottom:1px solid rgba(255,255,255,.07)}
+.code button{font:inherit;font-size:.7rem;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);color:var(--code-ink);border-radius:5px;padding:2px 8px;cursor:pointer}
+.code pre{margin:0;padding:12px 14px;overflow-x:auto;font-family:var(--f-mono);font-size:.82rem;line-height:1.6}
+.code .c{color:var(--code-dim)} .code .k{color:var(--code-acc)}
+
+/* steps */
+.steps{list-style:none;padding:0;margin:16px 0;counter-reset:s;display:flex;flex-direction:column;gap:8px;max-width:760px}
+.steps li{counter-increment:s;display:grid;grid-template-columns:40px 1fr;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.steps li::before{content:counter(s,decimal-leading-zero);font-family:var(--f-display);font-weight:800;font-size:1.1rem;color:var(--accent)}
+.steps li b{display:block}
+.steps li span{font-size:.92rem;color:var(--muted)}
+
+/* diagram */
+.diagram{overflow-x:auto;margin:16px 0;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px}
+.diagram svg{display:block;min-width:620px;width:100%;height:auto}
+.diagram text{font-family:var(--f-mono);fill:var(--ink)}
+.diagram .muted{fill:var(--muted)}
+.diagram .box{fill:var(--paper);stroke:var(--line);stroke-width:1.5}
+.diagram .box-acc{fill:var(--accent-soft);stroke:var(--accent);stroke-width:1.5}
+.diagram .ln{stroke:var(--muted);stroke-width:1.5;fill:none}
+.diagram .ln-acc{stroke:var(--accent);stroke-width:2;fill:none}
+
+/* done toggle */
+.done-row{margin:28px 0 0;display:flex;align-items:center;gap:12px}
+.done-btn{font:inherit;font-size:.88rem;font-weight:600;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:8px;padding:8px 14px;cursor:pointer;display:inline-flex;align-items:center;gap:8px}
+.done-btn::before{content:"";width:14px;height:14px;border-radius:4px;border:1.5px solid var(--muted)}
+.done-btn[aria-pressed="true"]{background:var(--ok-soft);border-color:var(--ok);color:var(--ok)}
+.done-btn[aria-pressed="true"]::before{background:var(--ok);border-color:var(--ok)}
+
+/* tools */
+.tool{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px;margin:18px 0}
+.tool h4{margin:0 0 4px;font-family:var(--f-display);font-weight:600;font-size:.95rem}
+.tool .hint{font-size:.85rem;color:var(--muted);margin:0 0 12px}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+input[type=text]{font:inherit;font-family:var(--f-mono);font-size:.95rem;padding:9px 12px;border-radius:8px;border:1px solid var(--line);background:var(--paper);color:var(--ink);flex:1;min-width:200px}
+.btn{font:inherit;font-size:.88rem;font-weight:600;padding:9px 14px;border-radius:8px;border:1px solid var(--accent);background:var(--accent);color:var(--on-accent);cursor:pointer}
+.btn.ghost{background:transparent;color:var(--accent)}
+.verdict{margin-top:12px;padding:10px 14px;border-radius:8px;font-size:.92rem;background:var(--paper);border:1px solid var(--line)}
+.verdict.ok{background:var(--ok-soft);border-color:var(--ok)} .verdict.bad{background:var(--bad-soft);border-color:var(--bad)} .verdict.warn{background:var(--warn-soft);border-color:var(--warn)}
+.verdict b{display:block}
+.samples{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.samples button{font-family:var(--f-mono);font-size:.76rem;border:1px dashed var(--line);background:transparent;color:var(--ink);padding:3px 8px;border-radius:6px;cursor:pointer}
+.samples button:hover{border-color:var(--accent);color:var(--accent)}
+
+/* order game */
+.order-pool{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.order-pool button{font:inherit;font-size:.86rem;padding:8px 12px;border-radius:8px;border:1px solid var(--line);background:var(--paper);color:var(--ink);cursor:pointer}
+.order-pool button.shake{animation:shake .35s}
+@keyframes shake{25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+.order-done{list-style:none;padding:0;margin:8px 0;display:flex;flex-direction:column;gap:4px;counter-reset:o}
+.order-done li{counter-increment:o;font-size:.88rem;padding:6px 10px;border-radius:6px;background:var(--ok-soft);color:var(--ok)}
+.order-done li::before{content:counter(o)". ";font-family:var(--f-mono);font-weight:600}
+
+/* exercises */
+details.task{background:var(--surface);border:1px solid var(--line);border-radius:12px;margin:10px 0;max-width:820px}
+details.task summary{cursor:pointer;padding:14px 16px;list-style:none;display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:baseline}
+details.task summary::-webkit-details-marker{display:none}
+details.task summary .n{font-family:var(--f-display);font-weight:800;color:var(--accent)}
+details.task summary .lvl{font-family:var(--f-mono);font-size:.7rem;color:var(--muted)}
+details.task .body{padding:0 16px 16px 16px;border-top:1px dashed var(--line)}
+details.task .body > p:first-child{margin-top:12px}
+.reveal{margin-top:10px}
+.reveal > button{font:inherit;font-size:.84rem;font-weight:600;background:none;border:1px solid var(--accent);color:var(--accent);border-radius:7px;padding:6px 12px;cursor:pointer}
+.reveal .sol{display:none;margin-top:10px;padding:12px 14px;border-radius:8px;background:var(--ok-soft);border:1px solid var(--ok);font-size:.93rem}
+.reveal.open .sol{display:block}
+.reveal .sol p{margin:.4em 0}
+
+/* quiz */
+.q{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;margin:12px 0;max-width:820px}
+.q .qt{font-weight:600;margin:0 0 10px}
+.q .qt span{font-family:var(--f-mono);font-size:.75rem;color:var(--muted);margin-right:8px}
+.q .opts{display:flex;flex-direction:column;gap:6px}
+.q .opts button{font:inherit;font-size:.92rem;text-align:left;padding:9px 12px;border-radius:8px;border:1px solid var(--line);background:var(--paper);color:var(--ink);cursor:pointer}
+.q .opts button:disabled{cursor:default}
+.q .opts button.right{background:var(--ok-soft);border-color:var(--ok)}
+.q .opts button.wrong{background:var(--bad-soft);border-color:var(--bad)}
+.q .why{display:none;margin-top:10px;font-size:.9rem;color:var(--muted)}
+.q.answered .why{display:block}
+.score{position:sticky;bottom:16px;display:inline-flex;gap:12px;align-items:center;background:var(--ink);color:var(--paper);padding:10px 16px;border-radius:999px;font-size:.9rem;margin-top:10px;z-index:5}
+.score button{font:inherit;font-size:.8rem;background:transparent;border:1px solid var(--paper);color:var(--paper);border-radius:999px;padding:2px 10px;cursor:pointer}
+
+/* glossary */
+.gloss{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:8px;margin:16px 0}
+.gloss div{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.gloss b{font-family:var(--f-mono);font-size:.85rem;display:block}
+.gloss span{font-size:.88rem;color:var(--muted)}
+
+footer{padding:40px 0;color:var(--muted);font-size:.85rem}
+
+@media (max-width:980px){
+  .hero{grid-template-columns:1fr}
+}
+@media (max-width:860px){
+  .shell{grid-template-columns:1fr}
+  .rack{display:none}
+  .mobile-top{display:flex;position:sticky;top:0;z-index:10;background:var(--surface);border-bottom:1px solid var(--line);padding:10px 16px;gap:10px;align-items:center;justify-content:space-between}
+  .mobile-top b{font-family:var(--f-display);font-size:.85rem}
+  .mobile-top select{font:inherit;font-size:.85rem;max-width:60%;padding:6px;border-radius:6px;border:1px solid var(--line);background:var(--paper);color:var(--ink)}
+  .duo{grid-template-columns:1fr}
+}
+@media (max-width:420px){ .nodes{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+<div class="mobile-top">
+  <b>contoso.local</b>
+  <label for="mnav" class="mono" style="position:absolute;left:-9999px">Глава</label>
+  <select id="mnav"></select>
+</div>
+<div class="shell">
+<aside class="rack" aria-label="Оглавление">
+  <div class="rack-head">contoso.local<small>Windows Server · B2 · 2026/2027</small></div>
+  <div class="progress">
+    <span id="progText">Пройдено 0 из 0 глав</span>
+    <div class="bar"><i id="progBar"></i></div>
+  </div>
+  <nav id="nav"></nav>
+  <button class="theme-btn" id="themeBtn" type="button">Сменить тему</button>
+</aside>
+
+<main>
+<!-- HERO -->
+<header class="hero" id="start">
+  <div>
+    <div class="eyebrow">Проект Contoso Technologies Services · CTS-DSI-001 / 002</div>
+    <h1>Домен <em>contoso.local</em> с нуля и простыми словами</h1>
+    <p class="lead">Здесь весь модуль Windows Server: зачем нужен домен, как поднять контроллер, что такое FSMO и репликация, как называть объекты по хартии и настраивать безопасность через GPO.</p>
+    <p class="lead" style="font-size:1rem;color:var(--muted)">Объясняю по-русски, но все термины оставляю на французском, как на экзамене. В конце задания, тест и шпаргалка PowerShell. Отмечай главы как пройденные: прогресс сохраняется в этом браузере.</p>
+    <div class="meta">
+      <span class="chip">18 глав</span><span class="chip">10 заданий</span><span class="chip">14 вопросов теста</span><span class="chip">3 тренажёра</span>
+    </div>
+  </div>
+
+  <section class="sim" aria-labelledby="simTitle">
+    <div class="sim-top"><b id="simTitle">Тренажёр отказа</b><span class="clock" id="simClock">Lundi 8h05</span></div>
+    <p style="margin:0 0 10px;font-size:.86rem;color:var(--muted)">Выключай серверы и смотри, что ломается у сотрудников и у DSI.</p>
+    <div class="nodes">
+      <button class="node" id="n1" type="button" aria-pressed="true"><span class="pw">ON</span><span class="nm">CTS-DC01</span><span class="st" id="n1s">контроллер, 5 ролей FSMO</span></button>
+      <button class="node off" id="n2" type="button" aria-pressed="false"><span class="pw">OFF</span><span class="nm">CTS-DC02</span><span class="st" id="n2s">ещё не установлен</span></button>
+    </div>
+    <div class="sim-opts">
+      <label><input type="checkbox" id="optFsmo"> PDC Emulator перенесён на DC02</label>
+      <label><input type="checkbox" id="optHost"> Обе ВМ на одном физическом хосте, и он упал</label>
+    </div>
+    <ul class="svc" id="svc"></ul>
+  </section>
+</header>
+
+<!-- 1 -->
+<section class="ch" id="module" data-title="Карта модуля" data-grp="Основа">
+  <div class="ch-head"><div class="ch-num">01</div><div class="ch-tag">Séance 1 · Contenu du module</div><h2>Что вообще происходит в этом модуле</h2></div>
+  <div class="prose">
+    <p>Contoso — вымышленная компания, с которой ты будешь работать с B1 по B3. В ней <b>40 сотрудников, 38 компьютеров, 6 отделов и ни одного каталога</b>. У каждого сотрудника локальная учётка на своём ПК, папки расшарены как придётся, и никто не знает, у кого к чему есть доступ.</p>
+    <p>Всё началось с простой просьбы: директор захотел список людей с доступом к папкам бухгалтерии. Никто не смог ответить меньше чем за день, и ответ всё равно был неточным. Ты младший системный администратор <span class="fr">(administrateur systèmes junior)</span>, и твоя задача — навести порядок.</p>
+  </div>
+  <ol class="steps">
+    <li><div><b>Сервер администрирования и первый контроллер домена</b><span>Поднимаешь CTS-DC01 и создаёшь домен contoso.local. Знакомишься с FSMO.</span></div></li>
+    <li><div><b>Инфраструктура, которая переживает поломки</b><span>Второй контроллер CTS-DC02 и репликация между ними.</span></div></li>
+    <li><div><b>Учётки и права каждого отдела</b><span>Пользователи, группы, GPO и сетевые папки строго по хартии и политике безопасности.</span></div></li>
+    <li><div><b>Всё автоматически</b><span>Разворачиваешь всю инфраструктуру скриптом PowerShell. Это <b>оценка №1</b>.</span></div></li>
+  </ol>
+  <div class="simply"><b>Главное</b>Два документа — твой закон: <code>CTS-DSI-001</code> (как называть) и <code>CTS-DSI-002</code> (как защищать). На оценке проверяют не только «работает ли», но и «соответствует ли этим документам».</div>
+  <div class="done-row"><button class="done-btn" type="button" data-done="module">Я разобрался</button></div>
+</section>
+
+<!-- 2 -->
+<section class="ch" id="comptes" data-title="Пользователь и админ" data-grp="Основа">
+  <div class="ch-head"><div class="ch-num">02</div><div class="ch-tag">Utilisateur / administrateur</div><h2>Обычная учётка и учётка администратора</h2></div>
+  <div class="duo">
+    <div class="card"><h4>Compte utilisateur</h4><p>Входит в систему и работает. Создаёт, меняет и удаляет <b>свои данные</b>. Не трогает чужие файлы и настройки компьютера.</p></div>
+    <div class="card"><h4>Compte administrateur</h4><p>Ставит программы и драйверы, меняет реестр и настройки, создаёт учётки, видит все файлы. Управляет <b>ресурсами инфраструктуры</b>.</p></div>
+  </div>
+  <div class="prose">
+    <p>Правило, которое будет везде: <b>у одного человека две учётки</b>. Обычная (<code>pmartin</code>) — для почты, браузера и Word. Админская (<code>adm-pmartin</code>) — только для администрирования. У них разные пароли.</p>
+    <p>Почему так строго? Если ты открыл фишинговое письмо под админом, вирус получает права админа. Под обычной учёткой он упрётся в ограничения. Это рекомендации ANSSI (французского агентства кибербезопасности) R27, R29 и R30.</p>
+  </div>
+  <h3>Локальный админ и админ домена</h3>
+  <div class="duo">
+    <div class="card"><h4>Administrateur local</h4><p>Его власть кончается на границе <b>одного компьютера</b>. Админ на CTS-WS-014 ничего не может на CTS-WS-015.</p></div>
+    <div class="card"><h4>Administrateur du domaine</h4><p>Его власть распространяется на <b>все машины в домене</b>. Группы <code>Admins du domaine</code> и <code>Administrateurs de l'entreprise</code> — самые опасные во всей инфраструктуре.</p></div>
+  </div>
+  <div class="simply"><b>Простыми словами</b>Локальный админ — это ключ от одной квартиры. Админ домена — мастер-ключ от всего дома. Потеряешь мастер-ключ, и вскроют весь дом. Поэтому всё, что делает админ домена, записывается в журнал на контроллере.</div>
+  <div class="done-row"><button class="done-btn" type="button" data-done="comptes">Я разобрался</button></div>
+</section>
+
+<!-- 3 -->
+<section class="ch" id="domaine" data-title="Зачем нужен домен" data-grp="Основа">
+  <div class="ch-head"><div class="ch-num">03</div><div class="ch-tag">Workgroup → domaine</div><h2>Почему локальные учётки не работают в масштабе</h2></div>
+  <div class="prose">
+    <p>Сейчас у Contoso <b>рабочая группа</b> <span class="fr">(WORKGROUP)</span>: каждый компьютер сам по себе и сам хранит свои учётки. Если Julie Moreau работает на трёх ПК, на каждом лежит своя <code>j.moreau</code> со своим паролем. Для Windows это <b>три разных человека</b>.</p>
+  </div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Ситуация</th><th>Без домена</th><th>С доменом</th></tr></thead>
+    <tbody>
+      <tr><td>Julie Moreau переходит в другой отдел</td><td>Обойти старый ПК, новый ПК и все ПК с общими папками, на каждом что-то создать или удалить</td><td>Перенести учётку в другую группу, один раз</td></tr>
+      <tr><td>В понедельник приходит новый сотрудник</td><td>Создать одну и ту же учётку с одним паролем на каждой нужной машине</td><td>Создать учётку один раз на контроллере</td></tr>
+      <tr><td>Подрядчик на 3 недели</td><td>Создать доступ, а потом не забыть удалить его на каждой машине</td><td>Учётка со сроком действия, сама отключится</td></tr>
+      <tr><td>Коммерсант уходит в пятницу</td><td>Неизвестно, где у него учётки. Нужно проверить все 38 ПК. <span class="pill bad">доказать нельзя</span></td><td>Отключить одну учётку. Вход запрещён везде, действие записано в журнал. <span class="pill ok">журнал — доказательство</span></td></tr>
+    </tbody>
+  </table></div>
+  <div class="simply"><b>Простыми словами</b>Рабочая группа — это офис, где у каждой двери свой замок и своя связка ключей у каждого сотрудника. Домен — это бизнес-центр с одной проходной: охранник (контроллер домена) держит список всех, и пропуск блокируется в одном месте.</div>
+  <h3>Что меняется, когда ПК входит в домен</h3>
+  <div class="prose"><ul>
+    <li><b>Вход.</b> Пользователь вводит <code>CONTOSO\jmoreau</code>. Компьютер спрашивает контроллер, и тот разрешает или отказывает.</li>
+    <li><b>Права.</b> Опираются на группы домена, а не на локальные учётки.</li>
+    <li><b>Настройки.</b> Групповые политики (GPO) сами применяют правила безопасности.</li>
+    <li><b>Администрирование.</b> Админы домена автоматически становятся локальными админами машины.</li>
+  </ul></div>
+  <div class="done-row"><button class="done-btn" type="button" data-done="domaine">Я разобрался</button></div>
+</section>
+
+<!-- 4 -->
+<section class="ch" id="vocab" data-title="Словарь AD" data-grp="Основа">
+  <div class="ch-head"><div class="ch-num">04</div><div class="ch-tag">Forêt · arbre · domaine · OU</div><h2>Матрёшка Active Directory</h2></div>
+  <div class="diagram" role="img" aria-label="Схема: лес содержит дерево, дерево содержит домен contoso.local, домен содержит OU CONTOSO с шестью OU отделов">
+    <svg viewBox="0 0 760 270">
+      <rect x="10" y="10" width="740" height="250" rx="14" class="box"/>
+      <text x="26" y="34" font-size="13" font-weight="600">Forêt — лес (граница безопасности)</text>
+      <rect x="30" y="48" width="700" height="198" rx="12" class="box"/>
+      <text x="46" y="70" font-size="13" font-weight="600">Arbre — дерево (общее пространство имён)</text>
+      <rect x="50" y="84" width="660" height="148" rx="10" class="box-acc"/>
+      <text x="66" y="106" font-size="13" font-weight="600">Domaine contoso.local</text>
+      <text x="270" y="106" font-size="11" class="muted">учётки · машины · GPO · DNS-имя</text>
+      <rect x="70" y="120" width="620" height="96" rx="8" class="box"/>
+      <text x="86" y="140" font-size="12" font-weight="600">OU=CONTOSO</text>
+      <g font-size="11">
+        <rect x="86" y="154" width="92" height="44" rx="6" class="box"/><text x="96" y="181">Direction</text>
+        <rect x="186" y="154" width="98" height="44" rx="6" class="box"/><text x="194" y="181">Commercial</text>
+        <rect x="292" y="154" width="104" height="44" rx="6" class="box"/><text x="298" y="181">Comptabilite</text>
+        <rect x="404" y="154" width="92" height="44" rx="6" class="box"/><text x="412" y="181">Technique</text>
+        <rect x="504" y="154" width="90" height="44" rx="6" class="box"/><text x="512" y="181">Marketing</text>
+        <rect x="602" y="154" width="74" height="44" rx="6" class="box"/><text x="630" y="181">RH</text>
+      </g>
+    </svg>
+  </div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Термин</th><th>Что это</th><th>Аналогия</th></tr></thead>
+    <tbody>
+      <tr><td><b>Forêt</b></td><td>Самый большой уровень и настоящая граница безопасности. Все домены в лесу доверяют друг другу.</td><td>Холдинг</td></tr>
+      <tr><td><b>Arbre</b></td><td>Несколько доменов с общим пространством имён: <code>contoso.local</code>, <code>paris.contoso.local</code>.</td><td>Компания и её филиалы</td></tr>
+      <tr><td><b>Domaine</b></td><td>Единица администрирования: учётки, машины, политики. У домена есть DNS-имя.</td><td>Одна компания</td></tr>
+      <tr><td><b>OU</b> <span class="fr">(unité d'organisation)</span></td><td>Папка внутри домена. Нужна, чтобы разложить объекты и привязать к ним GPO.</td><td>Отдел</td></tr>
+      <tr><td><b>Contrôleur de domaine (DC)</b></td><td>Сервер, на котором лежит каталог и который проверяет пароли.</td><td>Проходная с охранником</td></tr>
+    </tbody>
+  </table></div>
+  <div class="simply"><b>У Contoso</b>Один лес, одно дерево, один домен <code>contoso.local</code>. Внутри корневой OU <code>CONTOSO</code> и шесть OU отделов.</div>
+  <div class="done-row"><button class="done-btn" type="button" data-done="vocab">Я разобрался</button></div>
+</section>
+
+<!-- 5 -->
+<section class="ch" id="serveur" data-title="Windows Server и роли" data-grp="Основа">
+  <div class="ch-head"><div class="ch-num">05</div><div class="ch-tag">Windows Server 2022</div><h2>Чем сервер отличается от обычного ПК</h2></div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th></th><th>Windows Server 2022</th><th>Windows 11</th></tr></thead>
+    <tbody>
+      <tr><td>Зачем</td><td>Обслуживать другие машины круглосуточно</td><td>Чтобы работал один человек</td></tr>
+      <tr><td>Работает</td><td>Без перерывов и без открытой сессии</td><td>Когда пользователь включил</td></tr>
+      <tr><td>Подключения</td><td>Сотни ПК одновременно</td><td>Одна интерактивная сессия</td></tr>
+      <tr><td>Состав</td><td>Минимум, к которому добавляют нужные роли</td><td>Офисные и бытовые приложения</td></tr>
+      <tr><td>Управление</td><td>Удалённо, через консоли и командную строку</td><td>Локально, самим пользователем</td></tr>
+    </tbody>
+  </table></div>
+  <div class="duo">
+    <div class="card"><h4>Редакции</h4><p><b>Standard</b> закрывает обычные задачи. <b>Datacenter</b> добавляет неограниченную виртуализацию. Выбирают по числу планируемых виртуальных машин.</p></div>
+    <div class="card"><h4>Режим установки</h4><p><b>Desktop Experience</b> — с графикой. <b>Server Core</b> — без графики: легче и меньше уязвимостей. <b>После установки поменять нельзя.</b></p></div>
+  </div>
+  <h3>У сервера всегда есть роль</h3>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Роль</th><th>Что делает</th></tr></thead>
+    <tbody>
+      <tr><td><b>AD DS</b> <span class="fr">Services de domaine Active Directory</span></td><td>Каталог: люди, группы, машины, политики</td></tr>
+      <tr><td><b>DNS</b></td><td>Переводит имена в IP-адреса и сообщает, где находятся службы домена</td></tr>
+      <tr><td><b>Services de fichiers</b></td><td>Сетевые папки и тонкая настройка прав</td></tr>
+      <tr><td><b>DHCP</b></td><td>Автоматически раздаёт IP-адреса</td></tr>
+    </tbody>
+  </table></div>
+  <div class="trap"><b>Правило безопасности</b>Кто взломал контроллер домена, тот взломал всю компанию. Поэтому на контроллере <b>не работают, не ставят сторонние программы и не ходят в интернет</b>.</div>
+  <div class="done-row"><button class="done-btn" type="button" data-done="serveur">Я разобрался</button></div>
+</section>
+
+<!-- 6 -->
+<section class="ch" id="dns" data-title="DNS и контроллер" data-grp="Séance 1">
+  <div class="ch-head"><div class="ch-num">06</div><div class="ch-tag">Annuaire et DNS</div><h2>Как компьютер находит контроллер домена</h2></div>
+  <div class="prose"><p>Компьютер знает имя домена (<code>contoso.local</code>), но не знает, какой сервер в нём главный. Поэтому он спрашивает DNS.</p></div>
+  <ol class="steps">
+    <li><div><b>ПК загружается</b><span>Знает имя домена, но не знает, где контроллер.</span></div></li>
+    <li><div><b>Спрашивает DNS</b><span>«Кто обслуживает каталог для contoso.local?» Это запрос записи SRV <code>_ldap._tcp.dc._msdcs.contoso.local</code>.</span></div></li>
+    <li><div><b>DNS отвечает</b><span>«CTS-DC01, вот его адрес».</span></div></li>
+    <li><div><b>Открывается сессия</b><span>ПК связывается с контроллером, и тот проверяет пароль.</span></div></li>
+  </ol>
+  <div class="simply"><b>Два следствия, которые надо уметь объяснить</b>
+    1) У контроллера <b>статический IP</b>: его адрес записан в DNS, и если адрес поменяется, все потеряют контроллер.<br>
+    2) Сетевая карта CTS-DC01 указывает DNS <b>на саму себя</b>, потому что зона домена хранится на нём же.</div>
+  <div class="trap"><b>Рефлекс</b>Не получается войти в систему? <b>Сначала проверь DNS.</b> В 80% случаев проблема в нём.</div>
+  <div class="code"><div class="cap"><span>PowerShell · проверить, видит ли ПК контроллеры</span><button type="button" class="cp">Копировать</button></div><pre>Resolve-DnsName -Type SRV _ldap._tcp.dc._msdcs.contoso.local
+nltest /dsgetdc:contoso.local</pre></div>
+  <div class="done-row"><button class="done-btn" type="button" data-done="dns">Я разобрался</button></div>
+</section>
+
+<!-- 7 -->
+<section class="ch" id="deploy" data-title="Поднять CTS-DC01" data-grp="Séance 1">
+  <div class="ch-head"><div class="ch-num">07</div><div class="ch-tag">Mise en pratique</div><h2>Шесть шагов к первому контроллеру</h2></div>
+  <ol class="steps">
+    <li><div><b>Назвать машину CTS-DC01</b><span>По хартии и <u>до</u> повышения. Имя прописывается в DNS и в служебных ссылках при повышении, менять его потом рискованно.</span></div></li>
+    <li><div><b>Настроить адресацию</b><span>Статический IP, DNS указывает на сам сервер.</span></div></li>
+    <li><div><b>Установить роль AD DS</b><span>Пока только файлы роли: сервер ещё не контроллер.</span></div></li>
+    <li><div><b>Повысить до контроллера</b><span>Создаётся лес contoso.local, заодно ставится DNS.</span></div></li>
+    <li><div><b>Задать пароль DSRM</b><span>Аварийный вход, чтобы починить каталог, если он не запускается. Пароль хранится в сейфе и отличается от пароля админа домена.</span></div></li>
+    <li><div><b>Перезагрузить и проверить</b><span>Службы каталога стартуют только после перезагрузки.</span></div></li>
+  </ol>
+  <div class="code"><div class="cap"><span>PowerShell · CTS-DC01 (адреса для примера)</span><button type="button" class="cp">Копировать</button></div><pre><span class="c"># 1. Имя — до повышения</span>
+Rename-Computer -NewName "CTS-DC01" -Restart
+
+<span class="c"># 2. Статический IP + DNS на себя</span>
+New-NetIPAddress -InterfaceAlias "Ethernet" -IPAddress 192.168.10.10 -PrefixLength 24 -DefaultGateway 192.168.10.1
+Set-DnsClientServerAddress -InterfaceAlias "Ethernet" -ServerAddresses 192.168.10.10
+
+<span class="c"># 3. Файлы роли AD DS + консоли RSAT</span>
+Install-WindowsFeature AD-Domain-Services -IncludeManagementTools
+
+<span class="c"># 4–5. Новый лес + DNS + пароль DSRM</span>
+Install-ADDSForest -DomainName "contoso.local" -DomainNetbiosName "CONTOSO" -InstallDns `
+  -SafeModeAdministratorPassword (Read-Host -AsSecureString "Mot de passe DSRM")
+
+<span class="c"># 6. После перезагрузки</span>
+Get-ADDomain | Select-Object DNSRoot, PDCEmulator
+netdom query fsmo</pre></div>
+
+  <div class="tool" id="orderTool">
+    <h4>Тренажёр: расставь шаги по порядку</h4>
+    <p class="hint">Нажимай шаги в правильной последовательности. Ошибёшься — кнопка дёрнется.</p>
+    <div class="order-pool" id="orderPool"></div>
+    <ol class="order-done" id="orderDone"></ol>
+    <button class="btn ghost" type="button" id="orderReset">Начать заново</button>
+  </div>
+
+  <h3>Консоли RSAT, которые нужно узнавать</h3>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Команда</th><th>Консоль</th><th>Для чего</th></tr></thead>
+    <tbody>
+      <tr><td><code>dsa.msc</code></td><td>Utilisateurs et ordinateurs AD</td><td>Учётки, группы, OU</td></tr>
+      <tr><td><code>gpmc.msc</code></td><td>Gestion des stratégies de groupe</td><td>Создавать, привязывать, менять GPO</td></tr>
+      <tr><td><code>dssite.msc</code></td><td>Sites et services AD</td><td>Топология репликации</td></tr>
+      <tr><td><code>dnsmgmt.msc</code></td><td>Gestionnaire DNS</td><td>Зоны, записи, пересылка</td></tr>
+      <tr><td><code>domain.msc</code></td><td>Domaines et approbations AD</td><td>Функциональные уровни, доверия</td></tr>
+      <tr><td><code>dsac.exe</code></td><td>Centre d'administration AD</td><td>Современная консоль, корзина AD</td></tr>
+    </tbody>
+  </table></div>
+  <div class="prose"><p>RSAT (<span class="fr">Remote Server Administration Tools</span>) ставят и на рабочий ПК администратора, чтобы управлять сервером удалённо и не открывать на нём сессию.</p></div>
+  <div class="done-row"><button class="done-btn" type="button" data-done="deploy">Я разобрался</button></div>
+</section>
+
+<!-- 8 -->
+<section class="ch" id="fsmo" data-title="Роли FSMO" data-grp="Séance 1">
+  <div class="ch-head"><div class="ch-num">08</div><div class="ch-tag">Flexible Single Master Operations</div><h2>Пять ролей, которые нельзя делить</h2></div>
+  <div class="prose">
+    <p>В домене все контроллеры равны: у каждого полная копия каталога, и каждый принимает изменения. Это называется <b>multi-maître</b>. Создать пользователя на DC01 или на DC02 — одно и то же.</p>
+    <p>Но есть операции, которые нельзя выполнять одновременно в двух местах. Например, если два админа в одну секунду создадут по пользователю на разных контроллерах, что помешает выдать им одинаковый внутренний номер? Для таких операций назначают <b>одного ответственного</b> — держателя роли FSMO.</p>
+  </div>
+  <div class="simply"><b>Простыми словами</b>Все сотрудники могут писать в общий документ, но некоторые решения принимает только дежурный. Например, только паспортный стол выдаёт номера паспортов, иначе появятся дубли.</div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Роль</th><th>Уровень</th><th>Что делает</th><th>Если упадёт</th></tr></thead>
+    <tbody>
+      <tr><td><b>Schema Master</b></td><td>Лес</td><td>Единственный, кто меняет схему: описание того, какие бывают объекты и атрибуты. Расширение схемы необратимо.</td><td><span class="pill ok">сразу ничего</span> До следующего расширения схемы</td></tr>
+      <tr><td><b>Domain Naming Master</b></td><td>Лес</td><td>Добавляет и удаляет домены в лесу.</td><td><span class="pill ok">сразу ничего</span> До добавления домена</td></tr>
+      <tr><td><b>RID Master</b></td><td>Домен</td><td>Выдаёт каждому контроллеру пачку уникальных номеров (RID). Так у двух объектов никогда не будет одного идентификатора.</td><td><span class="pill ok">сразу ничего</span> Пока у контроллера не кончится пачка (около 500 номеров)</td></tr>
+      <tr><td><b>PDC Emulator</b></td><td>Домен</td><td>Эталон времени, блокировки учёток, смены паролей.</td><td><span class="pill bad">сразу</span> Время уезжает, блокировки и пароли сбоят</td></tr>
+      <tr><td><b>Infrastructure Master</b></td><td>Домен</td><td>Держит ссылки на объекты из других доменов.</td><td><span class="pill ok">ничего</span> В одном домене без работы</td></tr>
+    </tbody>
+  </table></div>
+  <div class="simply"><b>Запоминалка</b>Две роли на лес: <b>Schema</b> и <b>Domain Naming</b>. Три роли на домен: <b>PDC, RID, Infrastructure</b>. Сразу при падении болит только <b>PDC</b>, потому что он нужен при каждой аутентификации.</div>
+  <div class="code"><div class="cap"><span>PowerShell · где мои роли FSMO</span><button type="button" class="cp">Копировать</button></div><pre>netdom query fsmo                                   <span class="c"># всё одной строкой</span>
+Get-ADForest | Select-Object SchemaMaster, DomainNamingMaster
+Get-ADDomain | Select-Object PDCEmulator, RIDMaster, InfrastructureMaster</pre></div>
+  <div class="prose"><p>Зачем две команды? <code>netdom</code> показывает всё сразу. Командлеты PowerShell возвращают объекты, которые можно использовать в скрипте, и отделяют роли леса от ролей домена.</p>
+  <p><b>Профессиональный рефлекс:</b> после каждого повышения или переноса записывай, где лежат роли, в журнал эксплуатации. В день аварии искать будет некогда.</p></div>
+  <div class="done-row"><button class="done-btn" type="button" data-done="fsmo">Я разобрался</button></div>
+</section>
+
+<!-- 9 -->
+<section class="ch" id="redondance" data-title="Бэкап, резерв, репликация" data-grp="Séance 2">
+  <div class="ch-head"><div class="ch-num">09</div><div class="ch-tag">Lundi 8h05. CTS-DC01 ne redémarre pas.</div><h2>Когда единственный контроллер умирает</h2></div>
+  <div class="prose"><p>Включи в тренажёре наверху только DC01 и выключи его. Вот что произойдёт, от самого заметного к самому коварному:</p></div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Служба</th><th>Что ломается</th><th>Кто заметит</th></tr></thead>
+    <tbody>
+      <tr><td>Вход в систему</td><td>Невозможен на всех ПК домена, кроме уже открытых сессий и кэша</td><td>Все сотрудники, за минуты</td></tr>
+      <tr><td>Внутренний DNS</td><td>Ни одно внутреннее имя не резолвится: папки, принтеры, приложения</td><td>Все, через странные «несвязанные» ошибки</td></tr>
+      <tr><td>Сетевые папки</td><td>Отказ: файловый сервер не может проверить, кто ты</td><td>Сначала бухгалтерия и производство</td></tr>
+      <tr><td>Групповые политики</td><td>Правила безопасности не применяются и не обновляются</td><td><b>Никто.</b> В этом и опасность</td></tr>
+      <tr><td>Администрирование</td><td>Нельзя создать, изменить или отключить учётку</td><td>DSI, которая ничего не может сделать</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Sauvegarde и redondance — не одно и то же</h3>
+  <div class="duo">
+    <div class="card"><h4>Sauvegarde (резервная копия)</h4><p>Снимок на определённый момент. Восстановление <b>после</b> аварии, то есть после простоя. Теряется всё, что создали между копиями. <b>Лечит.</b></p></div>
+    <div class="card"><h4>Redondance (резервирование)</h4><p>Второй сервер работает постоянно. Служба продолжает работать <b>во время</b> аварии. Данные не теряются: они уже там. <b>Предотвращает.</b></p></div>
+  </div>
+  <div class="simply"><b>Простыми словами</b>Redondance — запасное колесо: пробил шину и поехал дальше. Sauvegarde — страховка: машину угнали, и тебе её восстанавливают, но не сразу. Нужно и то и другое.</div>
+  <div class="trap"><b>Важно</b>Резервирование защищает от поломки железа, но <b>не от человеческой ошибки</b>. Удалил OU на DC01 — через несколько секунд она удалится и на DC02. Поэтому нужны бэкап System State и корзина AD.</div>
+
+  <h3>Как работает репликация</h3>
+  <div class="diagram" role="img" aria-label="Два контроллера принимают записи и реплицируют изменения в обе стороны">
+    <svg viewBox="0 0 700 150">
+      <rect x="20" y="40" width="190" height="70" rx="10" class="box-acc"/><text x="42" y="70" font-size="15" font-weight="600">CTS-DC01</text><text x="42" y="92" font-size="11" class="muted">запись принимается</text>
+      <rect x="490" y="40" width="190" height="70" rx="10" class="box-acc"/><text x="512" y="70" font-size="15" font-weight="600">CTS-DC02</text><text x="512" y="92" font-size="11" class="muted">запись принимается</text>
+      <path d="M220 62 H480" class="ln-acc" marker-end="url(#ar)"/><path d="M480 90 H220" class="ln-acc" marker-end="url(#ar)"/>
+      <text x="268" y="52" font-size="11">только изменённые атрибуты</text>
+      <text x="300" y="118" font-size="11" class="muted">в обе стороны, за секунды</text>
+      <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/></marker></defs>
+    </svg>
+  </div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Принцип</th><th>Простыми словами</th></tr></thead>
+    <tbody>
+      <tr><td><b>Multi-maître</b></td><td>Нет главного и подчинённого (в отличие от старых доменов NT4). Писать можно на любой контроллер.</td></tr>
+      <tr><td><b>Cohérence à terme</b></td><td>Не мгновенно, но через короткое время все контроллеры приходят к одному состоянию.</td></tr>
+      <tr><td><b>Только дельта</b></td><td>Каждый контроллер помнит, докуда он получил изменения от соседей, и просит только недостающее.</td></tr>
+      <tr><td><b>Атрибут, а не объект</b></td><td>Поменял телефон пользователя — передаётся только телефон, а не весь объект. Поэтому репликация работает даже на медленной линии.</td></tr>
+      <tr><td><b>Конфликты</b></td><td>Два изменения одного атрибута одновременно: решает номер версии, потом время, потом идентификатор сервера.</td></tr>
+      <tr><td><b>KCC</b></td><td>Служба на каждом контроллере, которая сама строит связи репликации и обходит сломанного соседа.</td></tr>
+      <tr><td><b>Site</b></td><td>Группа хорошо связанных машин (не обязательно одно здание). Сайты — единственное, что задаёт админ, остальное делает KCC.</td></tr>
+    </tbody>
+  </table></div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th></th><th>Запуск</th><th>Задержка</th><th>Передача</th></tr></thead>
+    <tbody>
+      <tr><td><b>Intra-site</b> (внутри сайта)</td><td>Контроллер сразу оповещает соседей об изменении</td><td>Секунды</td><td>Без сжатия, линия быстрая</td></tr>
+      <tr><td><b>Inter-site</b> (между сайтами)</td><td>По расписанию, которое задаёт админ</td><td>По расписанию</td><td>Со сжатием, чтобы беречь линию</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Глобальный каталог (GC)</h3>
+  <div class="prose">
+    <p>Частичная копия <b>всех объектов леса</b>, но только самых востребованных атрибутов. Нужна для поиска по всему лесу и для проверки членства в универсальных группах при входе. Без доступного GC вход может сломаться.</p>
+  </div>
+  <div class="trap"><b>Не путай</b>GC — <b>не</b> роль FSMO. FSMO одна и решает споры. GC, наоборот, размножают ради скорости и доступности. В одном домене, как у Contoso, его включают на всех контроллерах.</div>
+  <div class="done-row"><button class="done-btn" type="button" data-done="redondance">Я разобрался</button></div>
+</section>
+
+<!-- 10 -->
+<section class="ch" id="dc02" data-title="Второй контроллер DC02" data-grp="Séance 2">
+  <div class="ch-head"><div class="ch-num">10</div><div class="ch-tag">Préparer CTS-DC02</div><h2>Добавляем второй контроллер</h2></div>
+  <ol class="steps">
+    <li><div><b>Назвать машину CTS-DC02</b><span>До повышения, как и в первый раз.</span></div></li>
+    <li><div><b>Задать статический IP</b><span>Своим отдельным адресом.</span></div></li>
+    <li><div><b>Указать DNS на CTS-DC01</b><span>А не на себя! См. ловушку ниже.</span></div></li>
+    <li><div><b>Повысить как дополнительный контроллер</b><span>В существующий домен, с DNS и GC.</span></div></li>
+    <li><div><b>Проверить репликацию</b><span>repadmin, затем тест на конвергенцию.</span></div></li>
+  </ol>
+  <div class="trap"><b>Главная ловушка</b>DNS у CTS-DC01 указывает на себя, потому что зона домена хранится на нём. У CTS-DC02 всё наоборот: он <b>ещё не знает домен</b> и должен спросить того, кто знает. Если он спросит сам себя, то не найдёт домен, и повышение упадёт с ошибкой.</div>
+  <div class="code"><div class="cap"><span>PowerShell · CTS-DC02</span><button type="button" class="cp">Копировать</button></div><pre>Rename-Computer -NewName "CTS-DC02" -Restart
+New-NetIPAddress -InterfaceAlias "Ethernet" -IPAddress 192.168.10.11 -PrefixLength 24 -DefaultGateway 192.168.10.1
+Set-DnsClientServerAddress -InterfaceAlias "Ethernet" -ServerAddresses 192.168.10.10   <span class="c"># ← DC01!</span>
+
+Install-WindowsFeature AD-Domain-Services -IncludeManagementTools
+Install-ADDSDomainController -DomainName "contoso.local" -InstallDns `
+  -Credential (Get-Credential "CONTOSO\adm-pmartin") `
+  -SafeModeAdministratorPassword (Read-Host -AsSecureString "Mot de passe DSRM")</pre></div>
+
+  <h3>Проверить, что репликация работает</h3>
+  <div class="code"><div class="cap"><span>repadmin /replsummary · нормальный вывод</span><button type="button" class="cp">Копировать</button></div><pre>PS C:\> repadmin /replsummary
+Source DSA          largest delta    fails/total %%   error
+ CTS-DC01              05m:12s          0 /   5    0
+ CTS-DC02              04m:48s          0 /   5    0</pre></div>
+  <div class="prose"><ul>
+    <li>Задержка (delta) в несколько минут — <b>нормально</b>.</li>
+    <li>Столбец <b>fails не равен нулю</b> — проблема, разбираться немедленно.</li>
+    <li><code>repadmin /showrepl</code> — подробности по соседям и последней попытке.</li>
+    <li><code>repadmin /syncall /AdeP</code> — принудительная полная синхронизация.</li>
+    <li><code>dcdiag /test:replications</code> — диагностика здоровья контроллера.</li>
+    <li>Раз в неделю смотреть repadmin — это обычная эксплуатация, а не только ремонт.</li>
+  </ul></div>
+  <h3>Доказать репликацию своими глазами</h3>
+  <div class="code"><div class="cap"><span>PowerShell · создать на одном, найти на другом</span><button type="button" class="cp">Копировать</button></div><pre>New-ADUser -Name "test.replication" -Server CTS-DC01 -Enabled $true   <span class="c"># создаём на DC01</span>
+Get-ADUser -Identity "test.replication" -Server CTS-DC02              <span class="c"># ищем на DC02</span>
+<span class="c"># Потом наоборот: группа на DC02 → ищем на DC01</span></pre></div>
+  <div class="prose"><p>Параметр <code>-Server</code> заставляет команду спросить конкретный контроллер. Так доказывают репликацию, и так же ищут контроллер, который отстаёт.</p></div>
+
+  <h3>Тест на отказ и что делать с FSMO</h3>
+  <div class="prose"><p>Корректно выключаем CTS-DC01. ПК спрашивает DNS, получает несколько записей SRV и переключается на CTS-DC02. Вход работает, ресурсы доступны. <b>Но</b> все пять ролей FSMO остались на DC01: для пользователей домен работает, а часть операций DSI заблокирована.</p></div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Действие</th><th>Когда</th><th>Как</th></tr></thead>
+    <tbody>
+      <tr><td><b>Répartir</b> (распределить)</td><td>Заранее, чтобы одна поломка не унесла все роли</td><td>Как минимум записать, где какая роль</td></tr>
+      <tr><td><b>Transférer</b> (передать)</td><td>Плановая операция: оба контроллера онлайн и договариваются. Чисто и обратимо</td><td><code>Move-ADDirectoryServerOperationMasterRole</code></td></tr>
+      <tr><td><b>Saisir</b> (захватить)</td><td>Аварийная операция: держатель роли умер навсегда</td><td>Та же команда с <code>-Force</code></td></tr>
+    </tbody>
+  </table></div>
+  <div class="code"><div class="cap"><span>PowerShell · передать PDC Emulator на DC02</span><button type="button" class="cp">Копировать</button></div><pre>Move-ADDirectoryServerOperationMasterRole -Identity "CTS-DC02" -OperationMasterRole PDCEmulator
+<span class="c"># -Force только для захвата, если держатель окончательно мёртв</span></pre></div>
+  <div class="trap"><b>Захваченный сервер никогда не возвращается</b>После захвата два контроллера считают себя законными держателями одной роли. Если они встретятся в сети, каталог станет несогласованным, и починить это очень тяжело. Контроллер, у которого захватили роли, <b>переустанавливают с нуля, а не включают</b>.</div>
+  <div class="duo">
+    <div class="card"><h4>Следи за часами</h4><p>Разница во времени ломает аутентификацию (Kerberos). Держатель PDC Emulator должен синхронизироваться с надёжным источником.</p></div>
+    <div class="card"><h4>Два DC на одном хосте</h4><p>Две «резервные» ВМ на одном физическом сервере ни от чего не защищают. Резервирование продумывают вплоть до железа.</p></div>
+  </div>
+  <div class="done-row"><button class="done-btn" type="button" data-done="dc02">Я разобрался</button></div>
+</section>
+
+<!-- 11 -->
+<section class="ch" id="nommage" data-title="Хартия именования" data-grp="Документы">
+  <div class="ch-head"><div class="ch-num">11</div><div class="ch-tag">CTS-DSI-001 · version 2.0</div><h2>Как называть всё в Contoso</h2></div>
+  <div class="prose"><p>Неправильно названный объект — потерянный объект. Его не найдёшь в инвентаре, не поддержишь и не защитишь. Вот все правила одной таблицей:</p></div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Объект</th><th>Правило</th><th>Пример</th></tr></thead>
+    <tbody>
+      <tr><td>Пользователь</td><td>Первая буква имени + фамилия, строчными, без акцентов и спецсимволов</td><td><code>mberrada</code>, <code>cfontaine</code></td></tr>
+      <tr><td>Однофамильцы</td><td>Добавить вторую букву имени</td><td><code>maberrada</code></td></tr>
+      <tr><td>Админ</td><td><code>adm-</code> + логин</td><td><code>adm-pmartin</code></td></tr>
+      <tr><td>Локальная группа</td><td>Название отдела строчными</td><td><code>technique</code></td></tr>
+      <tr><td>Глобальная группа AD</td><td><code>GG_&lt;Service&gt;</code></td><td><code>GG_Comptabilite</code></td></tr>
+      <tr><td>Группа прав AD</td><td><code>DL_&lt;Ressource&gt;_&lt;L|M&gt;</code>, L — чтение, M — изменение</td><td><code>DL_PartageCompta_M</code></td></tr>
+      <tr><td>Рабочая станция (старая схема)</td><td><code>cts-&lt;service&gt;-&lt;NN&gt;</code>, отделы tech / com / dir</td><td><code>cts-tech-01</code></td></tr>
+      <tr><td>Рабочая станция (новая схема)</td><td>Сквозная нумерация, без отдела</td><td><code>CTS-WS-001</code> … <code>CTS-WS-038</code></td></tr>
+      <tr><td>Сервер</td><td><code>CTS-&lt;FONCTION&gt;&lt;NN&gt;</code>. Никогда ни ОС, ни местоположения</td><td><code>CTS-DC01</code>, <code>CTS-FS01</code>, <code>CTS-APP01</code>, <code>CTS-BKP01</code></td></tr>
+      <tr><td>Домен / корневая OU</td><td></td><td><code>contoso.local</code> / <code>OU=CONTOSO</code></td></tr>
+      <tr><td>OU отделов</td><td>Без акцентов, только 6 официальных</td><td>Direction, Commercial, Comptabilite, Technique, Marketing, RH</td></tr>
+      <tr><td>GPO</td><td><code>GPO-&lt;PORTEE&gt;-&lt;Objet&gt;</code></td><td><code>GPO-SEC-Postes</code></td></tr>
+      <tr><td>Снапшот</td><td><code>&lt;contexte&gt;-&lt;description&gt;</code>, строчными, через дефис</td><td><code>s1-installation-propre</code></td></tr>
+      <tr><td>Отчёт DSI</td><td><code>&lt;reference&gt;_&lt;objet&gt;_&lt;AAAAMMJJ&gt;.pdf</code></td><td><code>CTS-DSI-003_incident_20261121.pdf</code></td></tr>
+    </tbody>
+  </table></div>
+  <div class="simply"><b>Почему в имени сервера нет ОС и места</b>ОС обновят, сервер переставят в другую стойку, а роль останется та же. Имя описывает <b>что он делает</b>, а не где стоит.</div>
+
+  <div class="tool">
+    <h4>Генератор логинов</h4>
+    <p class="hint">Введи имя и фамилию так, как их пишут люди, с акцентами. Получишь логин, админский логин и вариант для однофамильца.</p>
+    <div class="row"><label for="genIn" style="position:absolute;left:-9999px">Имя и фамилия</label><input type="text" id="genIn" value="Élodie Dupré-Lefèvre" autocomplete="off"><button class="btn" type="button" id="genBtn">Сгенерировать</button></div>
+    <div class="verdict" id="genOut" aria-live="polite"></div>
+  </div>
+
+  <div class="tool">
+    <h4>Проверка имени по хартии</h4>
+    <p class="hint">Вставь любое имя: учётку, группу, сервер, ПК, GPO, снапшот. Тренажёр определит тип и скажет, соответствует ли имя хартии.</p>
+    <div class="row"><label for="chkIn" style="position:absolute;left:-9999px">Имя объекта</label><input type="text" id="chkIn" value="CTS-DC1" autocomplete="off"><button class="btn" type="button" id="chkBtn">Проверить</button></div>
+    <div class="samples" id="samples"></div>
+    <div class="verdict" id="chkOut" aria-live="polite"></div>
+  </div>
+  <div class="done-row"><button class="done-btn" type="button" data-done="nommage">Я разобрался</button></div>
+</section>
+
+<!-- 12 -->
+<section class="ch" id="agdlp" data-title="Группы и AGDLP" data-grp="Документы">
+  <div class="ch-head"><div class="ch-num">12</div><div class="ch-tag">Account → Global → Domain Local → Permission</div><h2>AGDLP: права никогда не выдают людям</h2></div>
+  <div class="prose"><p>Самое важное правило прав: <b>права выдают только группам, никогда отдельной учётке</b>. В AD для этого есть модель AGDLP. Расшифровка — это и есть порядок:</p></div>
+  <div class="diagram" role="img" aria-label="AGDLP: учётки входят в группу GG_Comptabilite, она входит в DL_PartageCompta_M, у которой есть право изменения на папку PartageCompta">
+    <svg viewBox="0 0 760 170">
+      <defs><marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/></marker></defs>
+      <text x="20" y="22" font-size="11" class="muted">A · Accounts</text>
+      <rect x="20" y="34" width="140" height="30" rx="6" class="box"/><text x="32" y="54" font-size="12">cfontaine</text>
+      <rect x="20" y="72" width="140" height="30" rx="6" class="box"/><text x="32" y="92" font-size="12">mberrada</text>
+      <rect x="20" y="110" width="140" height="30" rx="6" class="box"/><text x="32" y="130" font-size="12">jmoreau</text>
+      <text x="210" y="22" font-size="11" class="muted">G · Global</text>
+      <rect x="210" y="66" width="160" height="42" rx="8" class="box-acc"/><text x="222" y="92" font-size="12" font-weight="600">GG_Comptabilite</text>
+      <text x="420" y="22" font-size="11" class="muted">DL · Domain Local</text>
+      <rect x="420" y="66" width="176" height="42" rx="8" class="box-acc"/><text x="430" y="92" font-size="12" font-weight="600">DL_PartageCompta_M</text>
+      <text x="640" y="22" font-size="11" class="muted">P · Permission</text>
+      <rect x="640" y="60" width="104" height="54" rx="8" class="box"/><text x="652" y="84" font-size="12" font-weight="600">\\CTS-FS01</text><text x="652" y="102" font-size="11" class="muted">PartageCompta</text>
+      <path d="M160 49 L205 80" class="ln-acc" marker-end="url(#ar2)"/><path d="M160 87 L205 87" class="ln-acc" marker-end="url(#ar2)"/><path d="M160 125 L205 95" class="ln-acc" marker-end="url(#ar2)"/>
+      <path d="M370 87 L415 87" class="ln-acc" marker-end="url(#ar2)"/>
+      <path d="M596 87 L635 87" class="ln-acc" marker-end="url(#ar2)"/>
+      <text x="606" y="150" font-size="11" class="muted">право M</text>
+    </svg>
+  </div>
+  <div class="prose"><ol>
+    <li><b>A</b> — учётки (люди) вступают в...</li>
+    <li><b>G</b> — глобальную группу своего отдела: <code>GG_Comptabilite</code>. Группа отвечает на вопрос «<b>кто</b> это».</li>
+    <li><b>DL</b> — глобальная группа вступает в доменную локальную группу ресурса: <code>DL_PartageCompta_M</code>. Группа отвечает на вопрос «<b>что</b> можно делать и с чем».</li>
+    <li><b>P</b> — права на папку выдаются <b>только DL-группе</b>.</li>
+  </ol></div>
+  <div class="simply"><b>Простыми словами</b>GG — это бейдж «я из бухгалтерии». DL — это пропуск «вход в архив, можно брать документы». Бейдж бухгалтерии прикреплён к пропуску в архив. Новый бухгалтер получает бейдж и сразу проходит в архив. В права папки при этом никто не лезет.</div>
+  <div class="prose"><p><b>Почему это удобно:</b> если директору нужно только чтение папки бухгалтерии, ты добавляешь <code>GG_Direction</code> в <code>DL_PartageCompta_L</code>, и всё. На вопрос «кто имеет доступ к папкам бухгалтерии» отвечаешь за минуту: смотришь членов двух DL-групп.</p></div>
+  <div class="code"><div class="cap"><span>PowerShell · AGDLP для бухгалтерии</span><button type="button" class="cp">Копировать</button></div><pre>$ou = "OU=Comptabilite,OU=CONTOSO,DC=contoso,DC=local"
+New-ADGroup -Name "GG_Comptabilite"    -GroupScope Global      -GroupCategory Security -Path $ou
+New-ADGroup -Name "DL_PartageCompta_M" -GroupScope DomainLocal -GroupCategory Security -Path $ou
+New-ADGroup -Name "DL_PartageCompta_L" -GroupScope DomainLocal -GroupCategory Security -Path $ou
+
+Add-ADGroupMember -Identity "GG_Comptabilite"    -Members "cfontaine"        <span class="c"># A → G</span>
+Add-ADGroupMember -Identity "DL_PartageCompta_M" -Members "GG_Comptabilite"  <span class="c"># G → DL</span>
+Add-ADGroupMember -Identity "DL_PartageCompta_L" -Members "GG_Direction"     <span class="c"># директор: чтение</span>
+<span class="c"># P: права NTFS на папку выдаются только CONTOSO\DL_PartageCompta_M и _L</span></pre></div>
+  <div class="done-row"><button class="done-btn" type="button" data-done="agdlp">Я разобрался</button></div>
+</section>
+
+<!-- 13 -->
+<section class="ch" id="securite" data-title="Политика безопасности" data-grp="Документы">
+  <div class="ch-head"><div class="ch-num">13</div><div class="ch-tag">CTS-DSI-002 · version 2.1</div><h2>Безопасность рабочих станций</h2></div>
+  <div class="prose"><p>Этот документ задаёт <b>минимальный уровень безопасности</b> любого ПК Contoso, физического или виртуального, до ввода в работу и всё время эксплуатации. Соответствие проверяют при сдаче по чеклисту <code>CTS-DSI-004</code>.</p></div>
+  <h3>1. Учётки и привилегии</h3>
+  <div class="prose"><ul>
+    <li><b>Минимальные привилегии:</b> только те права, которые нужны для работы.</li>
+    <li>Права выдаются группам, а не людям.</li>
+    <li>Кто администрирует, у того две учётки: обычная и <code>adm-</code>.</li>
+    <li>Встроенные учётки (Administrateur, root) не используются каждый день: они отключены или только для аварий.</li>
+    <li>Ревизия учёток при каждом движении персонала и минимум раз в год (ANSSI R32).</li>
+    <li>Временные права (например, на время ремонта) датируются и отзываются после работ. Отзыв записывается так же, как выдача.</li>
+  </ul></div>
+  <h3>2. Пароли</h3>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Параметр</th><th>Значение Contoso</th><th>Настройка в AD</th></tr></thead>
+    <tbody>
+      <tr><td>Минимальная длина</td><td>12 символов</td><td><code>MinPasswordLength 12</code></td></tr>
+      <tr><td>Сложность</td><td>Минимум одна заглавная и одна цифра</td><td><code>ComplexityEnabled $true</code> <span class="pill warn">см. ловушки</span></td></tr>
+      <tr><td>История</td><td>Нельзя 5 последних</td><td><code>PasswordHistoryCount 5</code></td></tr>
+      <tr><td>Срок действия</td><td>90 дней</td><td><code>MaxPasswordAge 90.00:00:00</code></td></tr>
+      <tr><td>Блокировка</td><td>5 ошибок → 15 минут</td><td><code>LockoutThreshold 5</code>, <code>LockoutDuration 00:15:00</code></td></tr>
+      <tr><td>Первый пароль</td><td>Смена при первом входе</td><td><code>-ChangePasswordAtLogon $true</code></td></tr>
+      <tr><td>Повтор между учётками</td><td>Запрещён</td><td>Организационное правило</td></tr>
+      <tr><td>Хранение</td><td>Менеджер паролей от DSI</td><td>Организационное правило</td></tr>
+    </tbody>
+  </table></div>
+  <div class="prose"><p>Срок 90 дней строже, чем рекомендуют ANSSI и CNIL: они требуют регулярной смены только для привилегированных учёток. Это сознательный выбор компании, его пересмотрят после внедрения MFA.</p></div>
+  <h3>3–6. Обновления, брандмауэр, защита, контроль</h3>
+  <div class="duo">
+    <div class="card"><h4>Обновления</h4><p>Всё обновлено при сдаче ПК, без исключений. В работе — патчи безопасности за 7 дней, лучше автоматически.</p></div>
+    <div class="card"><h4>Брандмауэр</h4><p>Включён на всех профилях, входящее запрещено по умолчанию. Каждый открытый порт обоснован. На обычном ПК — ни одного. <b>Порт 23 (Telnet) закрыт везде.</b> Выключить брандмауэр, чтобы «починить» — нарушение: чинят правило, а не защиту.</p></div>
+    <div class="card"><h4>Защита и шифрование</h4><p>Defender с защитой в реальном времени. BitLocker или LUKS на всех ноутбуках, ключ восстановления хранится в DSI, а не на ПК. Блокировка сессии через 10 минут.</p></div>
+    <div class="card"><h4>Контроль</h4><p>Аудит при сдаче: lynis на Linux, auditpol и конфиг брандмауэра на Windows. Подписанный чеклист <code>CTS-DSI-004</code>. Каждый инцидент — отчёт по шаблону <code>CTS-DSI-003</code>.</p></div>
+  </div>
+  <h3>7. Всё через GPO</h3>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Правило</th><th>Как сделать через GPO</th></tr></thead>
+    <tbody>
+      <tr><td>Пароли и блокировка</td><td>Политика учётных записей, <b>только на уровне домена</b></td></tr>
+      <tr><td>Блокировка через 10 минут</td><td>Заставка с паролем, задержка 600 секунд</td></tr>
+      <tr><td>Ограничение локальных прав</td><td>Groupes restreints, ограниченная панель управления</td></tr>
+      <tr><td>Брандмауэр включён</td><td>Профиль брандмауэра Defender навязан и не меняется локально</td></tr>
+    </tbody>
+  </table></div>
+  <div class="prose"><ul>
+    <li>GPO привязывают к <b>самому узкому</b> уровню, никогда к домену «для удобства».</li>
+    <li>Компьютер в контейнере по умолчанию (<code>CN=Computers</code>) <b>не получает GPO</b>, привязанные к OU. Это контейнер, а не OU, к нему нельзя привязать политику. Каждый ПК после входа в домен переносят в OU своего отдела.</li>
+    <li>После каждой сдачи проверяют, что политики применились: <code>gpupdate /force</code>, затем <code>gpresult /r</code>.</li>
+  </ul></div>
+  <div class="code"><div class="cap"><span>PowerShell · пароли и GPO</span><button type="button" class="cp">Копировать</button></div><pre><span class="c"># Политика паролей — на уровне домена</span>
+Set-ADDefaultDomainPasswordPolicy -Identity "contoso.local" -MinPasswordLength 12 -ComplexityEnabled $true `
+  -PasswordHistoryCount 5 -MaxPasswordAge 90.00:00:00 `
+  -LockoutThreshold 5 -LockoutDuration 00:15:00 -LockoutObservationWindow 00:15:00
+
+<span class="c"># GPO по хартии, привязанная к узкой OU</span>
+New-GPO -Name "GPO-SEC-Postes" | New-GPLink -Target "OU=Comptabilite,OU=CONTOSO,DC=contoso,DC=local"
+
+<span class="c"># Заставка с паролем через 10 минут (настройка пользователя)</span>
+$k = "HKCU\Software\Policies\Microsoft\Windows\Control Panel\Desktop"
+Set-GPRegistryValue -Name "GPO-SEC-Postes" -Key $k -ValueName "ScreenSaveActive"    -Type String -Value "1"
+Set-GPRegistryValue -Name "GPO-SEC-Postes" -Key $k -ValueName "ScreenSaverIsSecure" -Type String -Value "1"
+Set-GPRegistryValue -Name "GPO-SEC-Postes" -Key $k -ValueName "ScreenSaveTimeOut"   -Type String -Value "600"
+
+<span class="c"># Перенести ПК из CN=Computers в OU отдела</span>
+Move-ADObject -Identity "CN=CTS-WS-012,CN=Computers,DC=contoso,DC=local" `
+  -TargetPath "OU=Comptabilite,OU=CONTOSO,DC=contoso,DC=local"
+
+<span class="c"># На ПК: применить и доказать</span>
+gpupdate /force
+gpresult /r</pre></div>
+  <div class="done-row"><button class="done-btn" type="button" data-done="securite">Я разобрался</button></div>
+</section>
+
+<!-- 14 -->
+<section class="ch" id="pieges" data-title="Ловушки в документах" data-grp="Документы">
+  <div class="ch-head"><div class="ch-num">14</div><div class="ch-tag">Incohérences</div><h2>Где документы противоречат сами себе</h2></div>
+  <div class="prose"><p>Такие места часто специально оставляют для оценки. Правило простое: <b>следуй хартии и политике, а противоречие заметь и запиши</b>.</p></div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Где</th><th>Противоречие</th><th>Как поступить</th></tr></thead>
+    <tbody>
+      <tr><td>Слайды и хартия</td><td>На слайдах <code>j.moreau</code>, <code>test.replication</code>, а хартия требует <code>jmoreau</code></td><td>Делать <code>jmoreau</code>: хартия главнее</td></tr>
+      <tr><td>Хартия, пример GPO</td><td><code>GPO-SEC-Logistique</code>, но отдела Logistique нет среди шести официальных</td><td>Хартия сама велит отклонить такой запрос и передать в DSI</td></tr>
+      <tr><td>Хартия, админы</td><td>«Админская учётка персональная», и тут же общая <code>adm-it</code> для команды</td><td>Отметить конфликт с ANSSI R27. Для домена делать персональные <code>adm-</code></td></tr>
+      <tr><td>Хартия, группы и ПК</td><td>Локальные группы и сокращения ПК только для 3 отделов (tech / com / dir), а отделов 6</td><td>Для AD использовать <code>GG_</code> для всех шести. Для старых имён ПК сокращения нужно утвердить в DSI</td></tr>
+      <tr><td>Политика, пароли</td><td>«Одна заглавная и одна цифра» стандартный Windows не умеет: он требует 3 категории из 4</td><td>Включить сложность и записать, что это эквивалент, а не точное совпадение</td></tr>
+      <tr><td>Политика, глава 7</td><td>«Никогда не привязывать к домену», но пароли — только на домен</td><td>Это не ошибка: политика паролей домена работает только на уровне домена (или через FGPP)</td></tr>
+      <tr><td>Слайды и хартия, ПК</td><td>Слайд: <code>CTS-WS-001…038</code> «унаследованы с B1». Хартия: это новая схема для обновлённых ПК</td><td>Обе схемы действуют, пока парк обновляется. Новые ПК — <code>CTS-WS-NNN</code></td></tr>
+      <tr><td>Хартия, ВМ</td><td>«Гипервизор называет ВМ так же, как гостевую систему»</td><td>Значит, имя ВМ в Hyper-V или VirtualBox = имя хоста внутри (<code>CTS-DC02</code>)</td></tr>
+    </tbody>
+  </table></div>
+  <div class="done-row"><button class="done-btn" type="button" data-done="pieges">Я разобрался</button></div>
+</section>
+
+<!-- 15 -->
+<section class="ch" id="powershell" data-title="Шпаргалка PowerShell" data-grp="Практика">
+  <div class="ch-head"><div class="ch-num">15</div><div class="ch-tag">Évaluation n°1</div><h2>Каркас для оценки</h2></div>
+  <div class="prose"><p>Оценка №1 — развернуть рабочую инфраструктуру через PowerShell. Вот как превратить всё выше в один повторяемый скрипт для структуры OU и пользователей: данные отдельно, логика отдельно.</p></div>
+  <div class="code"><div class="cap"><span>PowerShell · OU + пользователи по хартии</span><button type="button" class="cp">Копировать</button></div><pre>Import-Module ActiveDirectory
+$base     = "DC=contoso,DC=local"
+$root     = "OU=CONTOSO,$base"
+$services = "Direction","Commercial","Comptabilite","Technique","Marketing","RH"
+
+<span class="c"># 1. Корневая OU и OU отделов (без ошибки, если уже есть)</span>
+if (-not (Get-ADOrganizationalUnit -Filter "Name -eq 'CONTOSO'" -SearchBase $base -SearchScope OneLevel)) {
+  New-ADOrganizationalUnit -Name "CONTOSO" -Path $base
+}
+foreach ($s in $services) {
+  if (-not (Get-ADOrganizationalUnit -Filter "Name -eq '$s'" -SearchBase $root -SearchScope OneLevel)) {
+    New-ADOrganizationalUnit -Name $s -Path $root
+  }
+  if (-not (Get-ADGroup -Filter "Name -eq 'GG_$s'")) {
+    New-ADGroup -Name "GG_$s" -GroupScope Global -GroupCategory Security -Path "OU=$s,$root"
+  }
+}
+
+<span class="c"># 2. Логин по хартии: первая буква имени + фамилия, без акцентов</span>
+function Get-CtsLogin([string]$Prenom, [string]$Nom, [int]$Lettres = 1) {
+  $raw = ($Prenom.Substring(0,$Lettres) + $Nom).ToLower()
+  $raw = $raw.Normalize([Text.NormalizationForm]::FormD) -replace '\p{Mn}',''
+  return ($raw -replace '[^a-z]','')
+}
+
+<span class="c"># 3. Пользователи из CSV: Prenom;Nom;Service</span>
+Import-Csv .\users.csv -Delimiter ";" | ForEach-Object {
+  if ($services -notcontains $_.Service) { Write-Warning "Отдел '$($_.Service)' вне хартии: отклонено"; return }
+  $login = Get-CtsLogin $_.Prenom $_.Nom
+  if (Get-ADUser -Filter "SamAccountName -eq '$login'") { $login = Get-CtsLogin $_.Prenom $_.Nom 2 }  <span class="c"># однофамилец</span>
+  New-ADUser -Name "$($_.Prenom) $($_.Nom)" -GivenName $_.Prenom -Surname $_.Nom `
+    -SamAccountName $login -UserPrincipalName "$login@contoso.local" `
+    -Path "OU=$($_.Service),$root" -Enabled $true -ChangePasswordAtLogon $true `
+    -AccountPassword (ConvertTo-SecureString "Temporaire2026!" -AsPlainText -Force)
+  Add-ADGroupMember -Identity "GG_$($_.Service)" -Members $login
+}</pre></div>
+  <div class="trap"><b>На заметку</b>Временный пароль в открытом виде в скрипте подходит только для лабораторной работы. Если хочешь показать уровень, бери пароль через <code>Read-Host -AsSecureString</code> или генерируй случайный для каждого пользователя.</div>
+  <h3>Команды, которые надо знать наизусть</h3>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Задача</th><th>Команда</th></tr></thead>
+    <tbody>
+      <tr><td>Все контроллеры и GC</td><td><code>Get-ADDomainController -Filter * | Select Name, IsGlobalCatalog</code></td></tr>
+      <tr><td>Роли FSMO</td><td><code>netdom query fsmo</code></td></tr>
+      <tr><td>Здоровье репликации</td><td><code>repadmin /replsummary</code></td></tr>
+      <tr><td>Найти отключённые учётки</td><td><code>Search-ADAccount -AccountDisabled -UsersOnly</code></td></tr>
+      <tr><td>Отключить ушедшего сотрудника</td><td><code>Disable-ADAccount -Identity jdupont</code></td></tr>
+      <tr><td>Члены группы</td><td><code>Get-ADGroupMember DL_PartageCompta_M -Recursive</code></td></tr>
+      <tr><td>ПК, оставшиеся в Computers</td><td><code>Get-ADComputer -SearchBase "CN=Computers,DC=contoso,DC=local" -Filter *</code></td></tr>
+      <tr><td>Новые ПК сразу в OU</td><td><code>redircmp "OU=Technique,OU=CONTOSO,DC=contoso,DC=local"</code></td></tr>
+      <tr><td>Корзина AD</td><td><code>Enable-ADOptionalFeature 'Recycle Bin Feature' -Scope ForestOrConfigurationSet -Target contoso.local</code></td></tr>
+      <tr><td>Какие GPO применились</td><td><code>gpresult /r</code></td></tr>
+    </tbody>
+  </table></div>
+  <div class="done-row"><button class="done-btn" type="button" data-done="powershell">Я разобрался</button></div>
+</section>
+
+<!-- 16 -->
+<section class="ch" id="exercices" data-title="Задания" data-grp="Практика">
+  <div class="ch-head"><div class="ch-num">16</div><div class="ch-tag">Exercices</div><h2>Задания с решениями</h2></div>
+  <div class="prose"><p>Сначала реши сам, на бумаге или в лабе, и только потом открывай решение. Уровень: ● лёгкое, ●● среднее, ●●● как на оценке.</p></div>
+
+  <details class="task"><summary><span class="n">1</span><span>Логины для новых сотрудников</span><span class="lvl">●</span></summary><div class="body">
+    <p>Пришли: <b>Élodie Dupré</b> (Marketing), <b>Malik Berrada</b> (Technique), <b>Marc Berrada</b> (Commercial), <b>Pierre Martin</b> (Technique, будет администрировать). Дай все логины по хартии.</p>
+    <div class="reveal"><button type="button">Показать решение</button><div class="sol">
+      <p><code>edupre</code> — акценты убраны.</p>
+      <p><code>mberrada</code> — Malik, первый.</p>
+      <p><code>maberrada</code> — Marc, однофамилец: добавлена вторая буква имени.</p>
+      <p><code>pmartin</code> и <code>adm-pmartin</code> — он администрирует, значит две учётки с разными паролями.</p>
+      <p>Бонус: если бы пришёл ещё и Mathieu Berrada, вышел бы снова <code>maberrada</code>. Хартия этот случай не описывает, такое надо заметить и спросить в DSI.</p>
+    </div></div></div></details>
+
+  <details class="task"><summary><span class="n">2</span><span>Найди 8 ошибок именования</span><span class="lvl">●</span></summary><div class="body">
+    <p>Список: <code>CTS-DC1</code>, <code>SRV-DC01-NICE</code>, <code>j.moreau</code>, <code>adm_pmartin</code>, <code>GG_Logistique</code>, <code>DL_PartageCompta_W</code>, <code>CTS-WS-039</code>, <code>Snapshot1</code>. Что не так в каждом? Проверь себя тренажёром в главе 11.</p>
+    <div class="reveal"><button type="button">Показать решение</button><div class="sol">
+      <p><code>CTS-DC1</code> — номер из двух цифр: <code>CTS-DC01</code>.</p>
+      <p><code>SRV-DC01-NICE</code> — префикс должен быть CTS, и в имени нельзя указывать место.</p>
+      <p><code>j.moreau</code> — без точки: <code>jmoreau</code>.</p>
+      <p><code>adm_pmartin</code> — дефис, а не подчёркивание: <code>adm-pmartin</code>.</p>
+      <p><code>GG_Logistique</code> — такого отдела нет, запрос отклоняется.</p>
+      <p><code>DL_PartageCompta_W</code> — права только L или M.</p>
+      <p><code>CTS-WS-039</code> — диапазон 001–038, номер вне парка, проверить в DSI.</p>
+      <p><code>Snapshot1</code> — нет понятного описания, такой снапшот удалят при ревизии. Например: <code>s2-avant-promotion-dc02</code>.</p>
+    </div></div></div></details>
+
+  <details class="task"><summary><span class="n">3</span><span>Спроектируй AGDLP</span><span class="lvl">●●</span></summary><div class="body">
+    <p>На <code>CTS-FS01</code> есть папка <b>Contrats</b>. Отдел Commercial меняет файлы, Direction читает, Comptabilite тоже читает. Какие группы создать, кто куда входит и какие права выдать?</p>
+    <div class="reveal"><button type="button">Показать решение</button><div class="sol">
+      <p>Глобальные (уже есть): <code>GG_Commercial</code>, <code>GG_Direction</code>, <code>GG_Comptabilite</code>.</p>
+      <p>Доменные локальные: <code>DL_Contrats_M</code> и <code>DL_Contrats_L</code>.</p>
+      <p>Членство: <code>GG_Commercial</code> → <code>DL_Contrats_M</code>; <code>GG_Direction</code> и <code>GG_Comptabilite</code> → <code>DL_Contrats_L</code>.</p>
+      <p>Права NTFS на папку: Modification для <code>DL_Contrats_M</code>, Lecture для <code>DL_Contrats_L</code>. И больше никому, никаких прав на отдельные учётки.</p>
+    </div></div></div></details>
+
+  <details class="task"><summary><span class="n">4</span><span>DC02 не находит домен</span><span class="lvl">●●</span></summary><div class="body">
+    <p>Ты запускаешь <code>Install-ADDSDomainController</code> на CTS-DC02 и получаешь «domaine introuvable». IP статический, имя правильное. В чём, скорее всего, причина и как проверить?</p>
+    <div class="reveal"><button type="button">Показать решение</button><div class="sol">
+      <p>DNS у CTS-DC02 указывает на себя (или на DNS провайдера), а не на CTS-DC01. Сам он домена не знает.</p>
+      <p>Проверка: <code>Get-DnsClientServerAddress</code>, затем <code>Resolve-DnsName -Type SRV _ldap._tcp.dc._msdcs.contoso.local</code>. Исправить: <code>Set-DnsClientServerAddress ... -ServerAddresses &lt;IP DC01&gt;</code>.</p>
+    </div></div></div></details>
+
+  <details class="task"><summary><span class="n">5</span><span>Lundi 8h05</span><span class="lvl">●●</span></summary><div class="body">
+    <p>Контроллер один, CTS-DC01 не загружается. Перечисли последствия от самого тяжёлого к самому лёгкому и оцени, сколько займёт восстановление из бэкапа пятницы. Что потеряно?</p>
+    <div class="reveal"><button type="button">Показать решение</button><div class="sol">
+      <p>1) Никто не может войти (кроме кэша). 2) Внутренний DNS мёртв, отваливается всё по именам. 3) Сетевые папки недоступны. 4) Админ ничего не может. 5) GPO не применяются, и этого не видно.</p>
+      <p>Восстановление: найти железо или ВМ, переустановить Windows Server, восстановить System State, перезагрузиться в DSRM, проверить. Реалистично это от нескольких часов до дня, и всё это время компания стоит.</p>
+      <p>Потеряно: всё, что создали или изменили в AD между пятницей вечером и аварией, например учётки и смены паролей. Вывод: нужен второй контроллер.</p>
+    </div></div></div></details>
+
+  <details class="task"><summary><span class="n">6</span><span>GPO не применяется к CTS-WS-012</span><span class="lvl">●●</span></summary><div class="body">
+    <p>Ты создал <code>GPO-SEC-Postes</code> и привязал её к OU Comptabilite. Через час на CTS-WS-012 заставка всё равно не блокирует сессию. Дай 4 пункта проверки по порядку.</p>
+    <div class="reveal"><button type="button">Показать решение</button><div class="sol">
+      <p>1) Где лежит объект компьютера? Если в <code>CN=Computers</code>, его надо перенести в OU Comptabilite через <code>Move-ADObject</code>.</p>
+      <p>2) Это настройка <b>пользователя</b> (HKCU), значит нужна OU, где лежит <b>учётка пользователя</b>, а не только компьютер.</p>
+      <p>3) <code>gpupdate /force</code> на ПК.</p>
+      <p>4) <code>gpresult /r</code>: видна ли GPO в списке применённых? Если нет — проверить DNS и связь с DC, а также фильтр безопасности GPO.</p>
+    </div></div></div></details>
+
+  <details class="task"><summary><span class="n">7</span><span>Докажи директору, что доступ отозван</span><span class="lvl">●●</span></summary><div class="body">
+    <p>Коммерсант Jean Dupont уходит в пятницу вечером. Что сделать и чем доказать?</p>
+    <div class="reveal"><button type="button">Показать решение</button><div class="sol">
+      <p><code>Disable-ADAccount -Identity jdupont</code>. Лучше отключить, а не удалить: сохранятся история, SID и права для аудита. Перенести учётку в OU отключённых и убрать из групп.</p>
+      <p>Доказательство: <code>Get-ADUser jdupont -Properties Enabled, whenChanged</code> плюс событие 4725 («учётка отключена») в журнале безопасности контроллера. Это одна учётка для всех 38 ПК, значит, доступ закрыт везде.</p>
+    </div></div></div></details>
+
+  <details class="task"><summary><span class="n">8</span><span>Политика паролей одной командой</span><span class="lvl">●●</span></summary><div class="body">
+    <p>Напиши команду, которая применяет все числовые требования главы 2 политики безопасности к домену. И объясни, почему это не делают через GPO на OU.</p>
+    <div class="reveal"><button type="button">Показать решение</button><div class="sol">
+      <p><code>Set-ADDefaultDomainPasswordPolicy -Identity contoso.local -MinPasswordLength 12 -ComplexityEnabled $true -PasswordHistoryCount 5 -MaxPasswordAge 90.00:00:00 -LockoutThreshold 5 -LockoutDuration 00:15:00 -LockoutObservationWindow 00:15:00</code></p>
+      <p>Политику паролей для доменных учёток читают только из GPO уровня домена. На OU она подействует лишь на <b>локальные</b> учётки ПК. Для разных правил у разных групп используют FGPP (Password Settings Objects).</p>
+    </div></div></div></details>
+
+  <details class="task"><summary><span class="n">9</span><span>Перенести или захватить?</span><span class="lvl">●●●</span></summary><div class="body">
+    <p>Три ситуации. (а) Во вторник плановое обслуживание DC01 на 2 часа. (б) У DC01 сгорел диск, бэкапа нет, сервер не вернётся. (в) После (б) коллега нашёл старый диск DC01 и хочет его включить. Что делать в каждом случае?</p>
+    <div class="reveal"><button type="button">Показать решение</button><div class="sol">
+      <p>(а) Ничего срочного. Можно заранее <b>передать</b> PDC Emulator на DC02 (<code>Move-ADDirectoryServerOperationMasterRole</code> без -Force), потом вернуть. Пользователи ничего не заметят.</p>
+      <p>(б) <b>Захватить</b> роли на DC02 (та же команда с <code>-Force</code>), почистить метаданные DC01, проверить DNS и GC.</p>
+      <p>(в) <b>Запретить.</b> Сервер, у которого захватили роли, никогда не возвращается в сеть, иначе два держателя одной роли испортят каталог. Только полная переустановка.</p>
+    </div></div></div></details>
+
+  <details class="task"><summary><span class="n">10</span><span>Мини-оценка: развернуть всё скриптом</span><span class="lvl">●●●</span></summary><div class="body">
+    <p>Сделай в лабе скрипт, который: создаёт <code>OU=CONTOSO</code> и 6 OU отделов; группы <code>GG_</code> для каждого; 2 пользователей на отдел из CSV с логинами по хартии; группы <code>DL_PartageCompta_L</code> и <code>_M</code> с правильным членством; применяет политику паролей; создаёт и привязывает <code>GPO-SEC-Postes</code>; в конце выводит роли FSMO и <code>repadmin /replsummary</code>. Скрипт должен запускаться повторно без ошибок.</p>
+    <div class="reveal"><button type="button">Показать чеклист проверки</button><div class="sol">
+      <p>☐ Все имена проходят тренажёр хартии.</p>
+      <p>☐ Ни одного права на отдельную учётку.</p>
+      <p>☐ Отдел вне шести официальных отклоняется с сообщением.</p>
+      <p>☐ Однофамильцы получают вторую букву имени.</p>
+      <p>☐ У новых учёток <code>ChangePasswordAtLogon</code>.</p>
+      <p>☐ GPO привязана к OU, а не к домену.</p>
+      <p>☐ Повторный запуск не падает: перед созданием проверяется <code>Get-AD*</code>.</p>
+      <p>☐ Вывод FSMO и репликации сохраняется в отчёт <code>CTS-DSI-..._deploiement_AAAAMMJJ</code>.</p>
+      <p>Основа есть в главе 15.</p>
+    </div></div></div></details>
+  <div class="done-row"><button class="done-btn" type="button" data-done="exercices">Я разобрался</button></div>
+</section>
+
+<!-- 17 -->
+<section class="ch" id="quiz" data-title="Тест" data-grp="Практика">
+  <div class="ch-head"><div class="ch-num">17</div><div class="ch-tag">Auto-évaluation</div><h2>Тест на 14 вопросов</h2></div>
+  <div class="prose"><p>После каждого ответа сразу будет объяснение. Набери 12 из 14, и можно считать, что модуль понят.</p></div>
+  <div id="quizBox"></div>
+  <div class="score" id="score">Счёт: 0 / 14 <button type="button" id="quizReset">Заново</button></div>
+  <div class="done-row"><button class="done-btn" type="button" data-done="quiz">Я разобрался</button></div>
+</section>
+
+<!-- 18 -->
+<section class="ch" id="glossaire" data-title="Глоссарий FR → RU" data-grp="Практика">
+  <div class="ch-head"><div class="ch-num">18</div><div class="ch-tag">Glossaire</div><h2>Французские термины с экзамена</h2></div>
+  <div class="gloss" id="gloss"></div>
+  <div class="done-row"><button class="done-btn" type="button" data-done="glossaire">Я разобрался</button></div>
+</section>
+
+<footer>По материалам курса Windows Server (Bazine Brice, B2 2026/2027) и документов CTS-DSI-001 v2.0, CTS-DSI-002 v2.1. IP-адреса в примерах условные.</footer>
+</main>
+</div>
+
+<script>
+(function(){
+  /* ---------- storage ---------- */
+  const KEY="contoso-ws-progress";
+  let done={};
+  try{done=JSON.parse(localStorage.getItem(KEY)||"{}")||{}}catch(e){done={}}
+  const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(done))}catch(e){}};
+
+  /* ---------- nav ---------- */
+  const chs=[...document.querySelectorAll("section.ch")];
+  const nav=document.getElementById("nav"), mnav=document.getElementById("mnav");
+  let grp="";
+  chs.forEach((s,i)=>{
+    if(s.dataset.grp!==grp){grp=s.dataset.grp;const g=document.createElement("div");g.className="grp";g.textContent=grp;nav.appendChild(g)}
+    const a=document.createElement("a");a.href="#"+s.id;a.dataset.id=s.id;
+    a.innerHTML='<span class="u">U'+String(i+1).padStart(2,"0")+'</span><span></span><span class="led"></span>';
+    a.children[1].textContent=s.dataset.title;nav.appendChild(a);
+    const o=document.createElement("option");o.value=s.id;o.textContent=String(i+1).padStart(2,"0")+" · "+s.dataset.title;mnav.appendChild(o);
+  });
+  mnav.addEventListener("change",()=>{document.getElementById(mnav.value).scrollIntoView()});
+
+  function refresh(){
+    let n=0;
+    document.querySelectorAll("[data-done]").forEach(b=>{const on=!!done[b.dataset.done];b.setAttribute("aria-pressed",on);b.textContent=on?"Пройдено":"Я разобрался";if(on)n++});
+    nav.querySelectorAll("a").forEach(a=>a.classList.toggle("done",!!done[a.dataset.id]));
+    document.getElementById("progText").textContent="Пройдено "+n+" из "+chs.length+" глав";
+    document.getElementById("progBar").style.width=(n/chs.length*100)+"%";
+  }
+  document.querySelectorAll("[data-done]").forEach(b=>b.addEventListener("click",()=>{const k=b.dataset.done;done[k]=!done[k];save();refresh()}));
+  refresh();
+
+  if("IntersectionObserver" in window){
+    const io=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){nav.querySelectorAll("a").forEach(a=>a.classList.toggle("active",a.dataset.id===e.target.id));mnav.value=e.target.id}})},{rootMargin:"-40% 0px -55% 0px"});
+    chs.forEach(s=>io.observe(s));
+  }
+
+  /* ---------- theme ---------- */
+  document.getElementById("themeBtn").addEventListener("click",()=>{
+    const r=document.documentElement;const cur=r.dataset.theme||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");
+    r.dataset.theme=cur==="dark"?"light":"dark";
+  });
+
+  /* ---------- copy ---------- */
+  document.querySelectorAll(".code .cp").forEach(b=>b.addEventListener("click",async()=>{
+    const t=b.closest(".code").querySelector("pre").innerText;
+    try{await navigator.clipboard.writeText(t);b.textContent="Скопировано"}catch(e){b.textContent="Выдели вручную"}
+    setTimeout(()=>b.textContent="Копировать",1600);
+  }));
+
+  /* ---------- reveal ---------- */
+  document.querySelectorAll(".reveal > button").forEach(b=>b.addEventListener("click",()=>{
+    const r=b.parentElement;r.classList.toggle("open");
+    b.textContent=r.classList.contains("open")?"Скрыть":(b.dataset.label||(b.dataset.label=b.textContent,b.textContent));
+  }));
+  document.querySelectorAll(".reveal > button").forEach(b=>b.dataset.label=b.textContent);
+
+  /* ---------- simulator ---------- */
+  const st={dc1:true,dc2:false,pdc2:false,host:false};
+  const n1=document.getElementById("n1"),n2=document.getElementById("n2");
+  function setNode(el,on){el.classList.toggle("off",!on);el.setAttribute("aria-pressed",on);el.querySelector(".pw").textContent=on?"ON":"OFF"}
+  function sim(){
+    const d1=st.dc1&&!st.host, d2=st.dc2&&!st.host;
+    setNode(n1,d1);setNode(n2,d2);
+    const pdcOn = st.pdc2 ? d2 : d1;
+    document.getElementById("n1s").textContent=st.pdc2?"контроллер, 4 роли FSMO":"контроллер, 5 ролей FSMO";
+    document.getElementById("n2s").textContent=st.dc2?(st.pdc2?"контроллер, GC, PDC Emulator":"контроллер, GC, DNS"):"выключен или ещё не установлен";
+    const any=d1||d2;
+    const L=[];
+    if(!any){
+      L.push(["bad","Вход в систему","Невозможен. Работают только открытые сессии и кэш"]);
+      L.push(["bad","Внутренний DNS","Имена не резолвятся: папки, принтеры, приложения"]);
+      L.push(["bad","Сетевые папки","Отказ: CTS-FS01 не может проверить личность"]);
+      L.push(["bad","GPO","Не применяются, и этого никто не видит"]);
+      L.push(["bad","Администрирование","Ни создать, ни отключить учётку"]);
+    }else{
+      L.push(["ok","Вход в систему", d1&&d2?"Работает, нагрузка на два DC":"Работает: ПК нашёл живой DC через записи SRV"]);
+      L.push(["ok","Внутренний DNS","Отвечает живой DC"]);
+      L.push(["ok","Сетевые папки","Доступны"]);
+      L.push(["ok","GPO","Применяются (SYSVOL на живом DC)"]);
+      L.push(["ok","Создание и изменение учёток","Работает: multi-maître, пишем на любой DC"]);
+      if(pdcOn) L.push(["ok","PDC Emulator","Доступен: время, блокировки и пароли в порядке"]);
+      else L.push(["warn","PDC Emulator","Недоступен: время начнёт расходиться, блокировки и смены паролей сбоят. Передай или захвати роль"]);
+      if(d1) L.push(["ok","RID, Schema, Naming","На живом DC01"]);
+      else L.push(["warn","RID, Schema, Naming","Недоступны. Сразу не болит, но новых номеров RID DC02 не получит, когда кончится пачка"]);
+    }
+    if(st.host&&(st.dc1||st.dc2)) L.unshift(["bad","Физический хост упал","Обе ВМ были на нём. Резервирование надо продумывать вплоть до железа"]);
+    document.getElementById("simClock").textContent = !any?"Lundi 8h05 · всё стоит":(d1&&d2?"Lundi 8h05 · штатно":"Lundi 8h05 · деградация");
+    document.getElementById("simClock").style.color = !any?"var(--bad)":(d1&&d2?"var(--ok)":"var(--warn)");
+    const ul=document.getElementById("svc");ul.innerHTML="";
+    L.forEach(([c,t,d])=>{const li=document.createElement("li");li.className=c;li.innerHTML='<span class="d"></span><div><b></b><br><span></span></div>';li.querySelector("b").textContent=t;li.querySelector("span:last-child").textContent=d;ul.appendChild(li)});
+  }
+  n1.addEventListener("click",()=>{st.dc1=!st.dc1;st.host=false;document.getElementById("optHost").checked=false;sim()});
+  n2.addEventListener("click",()=>{st.dc2=!st.dc2;st.host=false;document.getElementById("optHost").checked=false;sim()});
+  document.getElementById("optFsmo").addEventListener("change",e=>{st.pdc2=e.target.checked;sim()});
+  document.getElementById("optHost").addEventListener("change",e=>{st.host=e.target.checked;sim()});
+  sim();
+
+  /* ---------- order game ---------- */
+  const order=["Назвать CTS-DC01","Статический IP и DNS на себя","Установить роль AD DS","Повысить: новый лес contoso.local","Задать пароль DSRM","Перезагрузить и проверить"];
+  const pool=document.getElementById("orderPool"),od=document.getElementById("orderDone");
+  let pos=0;
+  function orderInit(){
+    pos=0;od.innerHTML="";pool.innerHTML="";
+    const sh=order.map((t,i)=>({t,i})).sort(()=>Math.random()-.5);
+    sh.forEach(o=>{const b=document.createElement("button");b.type="button";b.textContent=o.t;b.addEventListener("click",()=>{
+      if(o.i===pos){pos++;b.remove();const li=document.createElement("li");li.textContent=o.t;od.appendChild(li);
+        if(pos===order.length){const li2=document.createElement("li");li2.textContent="Готово. Контроллер поднят";li2.style.background="var(--accent-soft)";li2.style.color="var(--accent)";od.appendChild(li2)}}
+      else{b.classList.remove("shake");void b.offsetWidth;b.classList.add("shake")}
+    });pool.appendChild(b)});
+  }
+  document.getElementById("orderReset").addEventListener("click",orderInit);orderInit();
+
+  /* ---------- naming ---------- */
+  const SERVICES=["Direction","Commercial","Comptabilite","Technique","Marketing","RH"];
+  const strip=s=>s.normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+  function login(p,n,k){return strip((p.slice(0,k)+n).toLowerCase()).replace(/[^a-z]/g,"")}
+  function gen(){
+    const v=document.getElementById("genIn").value.trim().split(/\s+/);const out=document.getElementById("genOut");
+    if(v.length<2){out.className="verdict bad";out.innerHTML="<b>Нужно имя и фамилия</b>Например: Claire Fontaine";return}
+    const p=v[0],n=v.slice(1).join("");const l=login(p,n,1),l2=login(p,n,2);
+    out.className="verdict ok";
+    out.innerHTML="<b>"+l+"</b>Админ: <code>adm-"+l+"</code> · Однофамилец: <code>"+l2+"</code><br><span style='font-size:.85rem'>Акценты, дефисы и пробелы удалены, всё в нижнем регистре.</span>";
+  }
+  document.getElementById("genBtn").addEventListener("click",gen);
+  document.getElementById("genIn").addEventListener("keydown",e=>{if(e.key==="Enter")gen()});
+  gen();
+
+  function check(raw){
+    const s=raw.trim();
+    if(!s) return ["bad","Пусто","Введи имя объекта."];
+    if(/[àâäéèêëîïôöùûüç]/i.test(s)) return ["bad","Акценты запрещены","Хартия требует имён без акцентов и спецсимволов: "+strip(s)+"."];
+    // admin
+    if(/^adm/i.test(s)){
+      if(/^adm-[a-z]+$/.test(s)) return s==="adm-it"?["warn","Учётка adm-it","Допускается хартией для команды IT, но противоречит персональным админским учёткам (ANSSI R27). Для домена лучше adm-<логин>."]:["ok","Админская учётка","Префикс adm-, персональная, отдельно от обычной. Не использовать для почты и интернета."];
+      return ["bad","Админская учётка: неверный формат","Нужно adm- (дефис), затем логин строчными: adm-pmartin."];
+    }
+    // groups
+    if(/^gg_/i.test(s)){
+      const m=s.match(/^GG_([A-Za-z]+)$/);
+      if(!m) return ["bad","Глобальная группа: неверный формат","Формат GG_<Service>, например GG_Comptabilite."];
+      if(!SERVICES.includes(m[1])) { const ci=SERVICES.find(x=>x.toLowerCase()===m[1].toLowerCase()); return ci?["warn","Регистр","Пиши как в хартии: GG_"+ci+"."]:["bad","Такого отдела нет","Отделы: "+SERVICES.join(", ")+". Запрос отклонить и передать в DSI."]}
+      return ["ok","Глобальная группа отдела","Сюда входят учётки отдела. Сама группа входит в DL-группы ресурсов."];
+    }
+    if(/^dl_/i.test(s)){
+      const m=s.match(/^DL_([A-Za-z0-9]+)_([A-Z])$/);
+      if(!m) return ["bad","Доменная локальная группа: неверный формат","Формат DL_<Ressource>_<L|M>, например DL_PartageCompta_M."];
+      if(!["L","M"].includes(m[2])) return ["bad","Неизвестное право «"+m[2]+"»","Только L (lecture, чтение) или M (modification, изменение)."];
+      return ["ok","Группа прав на ресурс","Права NTFS выдаются только ей. Внутри — GG-группы, а не люди."];
+    }
+    // GPO
+    if(/^gpo/i.test(s)){
+      const m=s.match(/^GPO-([A-Z]+)-([A-Za-z]+)$/);
+      if(!m) return ["bad","GPO: неверный формат","Формат GPO-<PORTEE>-<Objet>: область заглавными, например GPO-SEC-Postes."];
+      if(m[2]==="Logistique") return ["bad","Отдела Logistique нет","Хоть этот пример и есть в хартии, Logistique не входит в шесть отделов. Запрос отклонить и передать в DSI."];
+      return ["ok","Имя GPO","Не забудь привязать её к самой узкой OU, а не к домену."];
+    }
+    // servers
+    if(/^cts-(dc|fs|app|bkp)/i.test(s)){
+      if(/^CTS-(DC|FS|APP|BKP)\d{2}$/.test(s)) return ["ok","Сервер","CTS + функция + две цифры. Без ОС и места. Имя задаётся до повышения до DC."];
+      if(/^CTS-(DC|FS|APP|BKP)\d$/i.test(s)) return ["bad","Номер из одной цифры","Нужны две цифры: "+s.toUpperCase().replace(/(\d)$/,"0$1")+"."];
+      if(/^cts-/.test(s)) return ["bad","Префикс сервера заглавными","Серверы пишутся заглавными: "+s.toUpperCase()+"."];
+      if(/^CTS-(DC|FS|APP|BKP)-\d+/i.test(s)) return ["bad","Лишний дефис","Между функцией и номером дефиса нет: CTS-DC01."];
+      return ["bad","Сервер: лишние части","Только CTS-<FONCTION><NN>. Ни ОС, ни места, ни лишних суффиксов."];
+    }
+    if(/^(srv|server)/i.test(s)||/(2019|2022|2025|nice|cannes|paris)/i.test(s)) return ["bad","Сервер не по хартии","Префикс CTS, функция (DC, FS, APP, BKP) и две цифры. ОС и место в имени запрещены."];
+    // workstations
+    if(/^cts-ws/i.test(s)){
+      const m=s.match(/^CTS-WS-(\d{3})$/);
+      if(!m) return ["bad","Рабочая станция: неверный формат","Новая схема: CTS-WS-NNN, три цифры заглавными, например CTS-WS-014."];
+      const k=+m[1]; if(k<1||k>38) return ["warn","Номер вне парка","В хартии диапазон CTS-WS-001…038. Новый номер нужно согласовать с DSI."];
+      return ["ok","Рабочая станция (новая схема)","Сквозная нумерация, не зависит от отдела: при переезде сотрудника ПК не переименовывают."];
+    }
+    if(/^cts-/i.test(s)){
+      const m=s.match(/^cts-([a-z]+)-(\d+)$/);
+      if(!m) return ["bad","Рабочая станция (старая схема): неверный формат","cts-<service>-<NN> строчными, например cts-tech-01."];
+      if(!["tech","com","dir"].includes(m[1])) return ["warn","Сокращение «"+m[1]+"» не определено","Хартия знает только tech, com, dir. Для остальных отделов используй новую схему CTS-WS-NNN."];
+      if(m[2].length!==2) return ["bad","Номер из двух цифр","Например: cts-"+m[1]+"-0"+m[2].slice(-1)+"."];
+      if(s!==s.toLowerCase()) return ["bad","Строчными","Старая схема пишется строчными."];
+      return ["ok","Рабочая станция (старая схема)","Действует для ПК, сданных по отдельности, пока обновляется парк."];
+    }
+    // reports
+    if(/\.pdf$/i.test(s)){
+      if(/^CTS-DSI-\d{3}_[A-Za-z0-9-]+_\d{8}\.pdf$/.test(s)) return ["ok","Отчёт DSI","<reference>_<objet>_<AAAAMMJJ>.pdf"];
+      return ["bad","Отчёт: неверный формат","<reference>_<objet>_<AAAAMMJJ>.pdf, например CTS-DSI-003_incident_20261121.pdf."];
+    }
+    // snapshots
+    if(/-/.test(s)&&/^[a-z0-9-]+$/.test(s)) return ["ok","Похоже на снапшот","<contexte>-<description>, строчными через дефис. Главное, чтобы описание было понятным."];
+    if(/^snap/i.test(s)||/^[A-Za-z]+\d+$/.test(s)&&/[A-Z]/.test(s)) return ["bad","Снапшот без описания","Такой удалят при ревизии хранилища. Пример: s2-avant-promotion-dc02."];
+    // users
+    if(/\./.test(s)) return ["bad","Точка в логине","Хартия: первая буква имени + фамилия, без точки. Было бы: "+s.replace(/\./g,"").toLowerCase()+"."];
+    if(SERVICES.map(x=>x.toLowerCase()).includes(s)) return ["ok","Локальная группа отдела","Строчными, как в хартии. Права выдаются группам, не людям."];
+    if(/^[a-z]{3,}$/.test(s)) return ["ok","Похоже на логин пользователя","Первая буква имени + фамилия строчными. Однофамильцу добавляют вторую букву имени."];
+    if(/^[A-Za-z]+$/.test(s)){
+      if(SERVICES.includes(s)) return ["ok","OU отдела","Одна из шести официальных OU внутри OU=CONTOSO."];
+      if(SERVICES.map(x=>x.toLowerCase()).includes(s.toLowerCase())) return ["ok","Локальная группа или OU","Локальная группа пишется строчными ("+s.toLowerCase()+"), OU — с заглавной."];
+      return ["bad","Заглавные в логине","Логины только строчными: "+s.toLowerCase()+"."];
+    }
+    if(/_/.test(s)) return ["bad","Подчёркивание","В логинах и именах машин подчёркиваний нет. Подчёркивание есть только в GG_ и DL_."];
+    return ["warn","Тип не определён","Попробуй один из примеров ниже."];
+  }
+  const samplesList=["CTS-DC1","CTS-DC02","SRV-DC01-NICE","j.moreau","maberrada","adm_pmartin","adm-it","GG_Logistique","GG_Comptabilite","DL_PartageCompta_W","CTS-WS-039","cts-rh-01","GPO-SEC-Logistique","Snapshot1","s1-installation-propre"];
+  const sm=document.getElementById("samples");
+  samplesList.forEach(t=>{const b=document.createElement("button");b.type="button";b.textContent=t;b.addEventListener("click",()=>{document.getElementById("chkIn").value=t;runChk()});sm.appendChild(b)});
+  function runChk(){const [c,t,d]=check(document.getElementById("chkIn").value);const o=document.getElementById("chkOut");o.className="verdict "+c;o.innerHTML="";const b=document.createElement("b");b.textContent=(c==="ok"?"✓ ":c==="warn"?"! ":"✗ ")+t;o.appendChild(b);o.appendChild(document.createTextNode(d))}
+  document.getElementById("chkBtn").addEventListener("click",runChk);
+  document.getElementById("chkIn").addEventListener("keydown",e=>{if(e.key==="Enter")runChk()});
+  runChk();
+
+  /* ---------- quiz ---------- */
+  const Q=[
+    ["Почему DNS у CTS-DC01 указывает на сам сервер?",["Так быстрее","Он хранит зону домена contoso.local","Так требует ANSSI","Чтобы не платить провайдеру"],1,"Зона домена лежит на DC01, поэтому он сам себе лучший DNS. У DC02 при подготовке всё наоборот."],
+    ["Какую роль FSMO почувствуют сразу, если её держатель упадёт?",["Schema Master","RID Master","PDC Emulator","Infrastructure Master"],2,"PDC Emulator участвует почти в каждой аутентификации: время, блокировки, смена паролей. Остальные роли нужны для редких операций."],
+    ["Сколько ролей FSMO на уровне леса?",["1","2","3","5"],1,"Две: Schema Master и Domain Naming Master. Три остальные (PDC, RID, Infrastructure) на уровне домена."],
+    ["Какой логин правильный для Claire Fontaine?",["c.fontaine","CFontaine","cfontaine","fontainec"],2,"Первая буква имени + фамилия, строчными, без точки."],
+    ["Где по AGDLP выдаются права NTFS на папку?",["Учётке пользователя","Группе GG_","Группе DL_","Группе Admins du domaine"],2,"Права только у доменной локальной группы. Внутри неё GG-группы, а в GG — люди."],
+    ["Компьютер вошёл в домен, но не получает GPO отдела. Самая частая причина?",["Не включён брандмауэр","Он остался в контейнере CN=Computers","Слишком длинное имя","Не хватает RID"],1,"CN=Computers — контейнер, а не OU. К нему нельзя привязать GPO, ПК нужно перенести в OU отдела."],
+    ["Чем redondance отличается от sauvegarde?",["Ничем","Redondance продолжает работу во время аварии, sauvegarde восстанавливает после","Sauvegarde быстрее","Redondance защищает от удаления по ошибке"],1,"Резервирование предотвращает простой, бэкап лечит после него. От ошибки человека резервирование не спасает: удаление тоже реплицируется."],
+    ["Что передаёт репликация, если у пользователя поменяли телефон?",["Весь каталог","Весь объект пользователя","Только изменённый атрибут","Ничего до ночи"],2,"Реплицируется атрибут, а не объект, и только дельта. Поэтому репликация лёгкая."],
+    ["Глобальный каталог (GC) — это роль FSMO?",["Да, шестая","Нет. Его, наоборот, включают на всех DC","Да, но только в лесу","Это то же, что PDC"],1,"FSMO существует в одном экземпляре ради арбитража, GC размножают ради доступности. У Contoso — на всех контроллерах."],
+    ["Держатель ролей сгорел навсегда. Что делать?",["Transférer","Saisir, то есть захватить роли","Ждать, пока починят","Переименовать DC02 в DC01"],1,"Передача требует, чтобы оба DC были онлайн. Если держателя нет — захват (-Force). Старый сервер больше никогда не включают."],
+    ["Какое имя сервера соответствует хартии?",["CTS-DC1","SRV2022-DC01","CTS-FS01","cts-fs-01"],2,"CTS + функция + две цифры, заглавными, без ОС и места."],
+    ["Почему имя контроллера задают до повышения?",["Иначе не активируется Windows","Имя прописывается в DNS и служебных ссылках, менять потом рискованно","Так красивее","Чтобы получить RID"],1,"После повышения имя есть в записях DNS и SPN. Переименование — чувствительная операция."],
+    ["Какая ловушка при подготовке CTS-DC02?",["Указать DNS на себя","Указать DNS на CTS-DC01","Дать статический IP","Назвать его CTS-DC02"],0,"DC02 ещё не знает домен. Если он спросит сам себя, повышение упадёт. DNS должен указывать на DC01."],
+    ["Где задаётся политика паролей для доменных учёток Contoso?",["В GPO на OU каждого отдела","На уровне домена","На каждом ПК локально","В DHCP"],1,"Политику паролей домена читают только на уровне домена. Для исключений есть FGPP."]
+  ];
+  const box=document.getElementById("quizBox");let score=0,answered=0;
+  function renderQuiz(){
+    box.innerHTML="";score=0;answered=0;updScore();
+    Q.forEach((q,i)=>{
+      const d=document.createElement("div");d.className="q";
+      const t=document.createElement("p");t.className="qt";t.innerHTML="<span>"+String(i+1).padStart(2,"0")+"</span>";t.appendChild(document.createTextNode(q[0]));d.appendChild(t);
+      const o=document.createElement("div");o.className="opts";
+      q[1].forEach((a,j)=>{const b=document.createElement("button");b.type="button";b.textContent=a;b.addEventListener("click",()=>{
+        if(d.classList.contains("answered"))return;d.classList.add("answered");answered++;
+        o.querySelectorAll("button").forEach((x,k)=>{x.disabled=true;if(k===q[2])x.classList.add("right")});
+        if(j===q[2])score++;else b.classList.add("wrong");updScore();
+      });o.appendChild(b)});
+      d.appendChild(o);
+      const w=document.createElement("p");w.className="why";w.textContent=q[3];d.appendChild(w);
+      box.appendChild(d);
+    });
+  }
+  function updScore(){const s=document.getElementById("score");s.firstChild.textContent="Счёт: "+score+" / "+Q.length+(answered===Q.length?(score>=12?" · модуль понят":" · перечитай слабые главы"):"")+" "}
+  document.getElementById("quizReset").addEventListener("click",renderQuiz);
+  renderQuiz();
+
+  /* ---------- glossary ---------- */
+  const G=[["annuaire","каталог (база всех учёток и машин)"],["contrôleur de domaine","контроллер домена"],["forêt / arbre / domaine","лес / дерево / домен"],["unité d'organisation (OU)","подразделение, «папка» в AD"],["stratégie de groupe (GPO)","групповая политика"],["promouvoir / promotion","повысить сервер до контроллера"],["rôle FSMO","роль с единственным держателем"],["transférer / saisir","передать / захватить роль"],["réplication","репликация, синхронизация между DC"],["redondance","резервирование, второй работающий сервер"],["sauvegarde","резервная копия, бэкап"],["catalogue global","глобальный каталог (GC)"],["site","сайт, группа хорошо связанных машин"],["groupe global","глобальная группа (кто это)"],["groupe de domaine local","доменная локальная группа (права на ресурс)"],["partage réseau","сетевая папка"],["droits / permissions","права"],["lecture / modification","чтение / изменение"],["moindre privilège","минимальные привилегии"],["compte d'administration","админская учётка"],["mot de passe DSRM","аварийный пароль восстановления каталога"],["poste de travail","рабочая станция, ПК"],["pare-feu","брандмауэр, файрвол"],["chiffrement de disque","шифрование диска"],["verrouillage de session","блокировка сессии"],["mise à jour","обновление"],["charte de nommage","хартия (правила) именования"],["conformité / non-conformité","соответствие / нарушение"],["cohérence à terme","согласованность через некоторое время"],["livrable","сдаваемый результат, отчёт"]];
+  const gl=document.getElementById("gloss");
+  G.forEach(([f,r])=>{const d=document.createElement("div");const b=document.createElement("b");b.textContent=f;const s=document.createElement("span");s.textContent=r;d.appendChild(b);d.appendChild(s);gl.appendChild(d)});
+})();
+</script>
+</body>
+</html>
